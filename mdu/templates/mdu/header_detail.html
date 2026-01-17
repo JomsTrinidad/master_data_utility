@@ -20,15 +20,15 @@
     </div>
 
     <div class="d-flex gap-2">
-      {# Optional: show action buttons if you already have them wired #}
-      {% if can_propose and header.status != "RETIRED" %}
-        <a class="btn btn-primary btn-sm" href="{% url 'mdu:proposed_change_create' header.pk %}">
+      {% if is_maker and header.status != "RETIRED" %}
+        <a class="btn btn-primary btn-sm" href="{% url 'mdu:propose_change' header_pk=header.pk %}">
           Propose change
         </a>
       {% elif header.status == "RETIRED" %}
         <button class="btn btn-secondary btn-sm" disabled>Retired (read-only)</button>
       {% endif %}
     </div>
+    
   </div>
 
   <!-- Accordion: one-page, screenshot-friendly -->
@@ -42,6 +42,8 @@
         </button>
       </h2>
       <div id="collapseOverview" class="accordion-collapse collapse show" aria-labelledby="headingOverview">
+
+
 
       <div class="accordion-body">
 
@@ -78,7 +80,7 @@
               <div class="text-muted large text-uppercase mb-3" style="letter-spacing: 0.3em;">Identity</div>
 
               <div class="mb-2">
-                <div class="text-muted small">Reference name</div>
+                <div class="text-muted small">Reference Name</div>
                 <div class="fw-semibold">{{ header.ref_name }}</div>
               </div>
 
@@ -92,7 +94,7 @@
                   <div class="fw-semibold">{{ header.mode|default:"—"|title }}</div>
                 </div>
                 <div class="col-6">
-                  <div class="text-muted small">Current version</div>
+                  <div class="text-muted small">Current Version</div>
                   <div class="fw-semibold">
                     {% if current_version is not None %}{{ current_version }}{% else %}—{% endif %}
                   </div>
@@ -123,14 +125,14 @@
                 </div>
 
                 <div class="col-6">
-                  <div class="text-muted small">Last updated</div>
+                  <div class="text-muted small">Last Updated</div>
                   <div class="fw-semibold">
                     {% if header.updated_at %}{{ header.updated_at }}{% else %}—{% endif %}
                   </div>
                 </div>
 
                 <div class="col-12">
-                  <div class="text-muted small">Latest approved change</div>
+                  <div class="text-muted small">Latest Approved Change</div>
                   <div class="fw-semibold">
                     {% if latest %}
                       <a href="#"
@@ -141,7 +143,7 @@
                         {{ latest.display_id }}
                       </a>
                       <span class="text-muted small">
-                        {% if latest.decided_at %} — approved {{ latest.decided_at }}{% endif %}
+                        {% if latest.decided_at %} — Approved {{ latest.decided_at }}{% endif %}
                       </span>
                     {% else %}
                       —
@@ -174,26 +176,26 @@
                   {% endif %}
 
                   {% if cert_expires_on %}
-                    <span class="text-muted small"> — expires {{ cert_expires_on }}</span>
+                    <span class="text-muted small"> — Expires {{ cert_expires_on }}</span>
                   {% endif %}
                 </div>
 
                 {% if cert_certified_on %}
-                  <div class="text-muted small mt-1">Last certified: {{ cert_certified_on }}</div>
+                  <div class="text-muted small mt-1">Last Certified: {{ cert_certified_on }}</div>
                 {% endif %}
               </div>
 
 
               <div class="row g-2">
                 <div class="col-12">
-                  <div class="text-muted small">Primary approver</div>
+                  <div class="text-muted small">Primary Approver</div>
                   <div class="fw-semibold">
                     {% if latest and latest.primary_approver_sid %}{{ latest.primary_approver_sid }}{% else %}—{% endif %}
                   </div>
                 </div>
 
                 <div class="col-12">
-                  <div class="text-muted small">Risk impact</div>
+                  <div class="text-muted small">Risk Impact</div>
                   <div class="fw-semibold">
                     {% if latest and latest.risk_impact %}{{ latest.risk_impact }}{% else %}—{% endif %}
                   </div>
@@ -236,26 +238,40 @@
               Full dataset from the latest approved change.
             </div>
 
-            <div class="d-flex gap-2">
-              {% if latest and data_rows %}
-                <a class="btn btn-sm btn-outline-secondary"
-                  href="{% url 'mdu:approved_export_csv' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
-                  Export CSV
-                </a>
-                <a class="btn btn-sm btn-outline-secondary"
-                  href="{% url 'mdu:approved_export_json' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
-                  Export JSON
-                </a>
-              {% else %}
-                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
-                  Export CSV
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
-                  Export JSON
-                </button>
-                <div class="small text-muted mt-1">Exports appear after a change is approved.</div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              {% if is_maker and header.status != "RETIRED" %}
+                {% if pending_change %}
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled
+                          title="A pending change already exists. View it above or wait for approval/rejection.">
+                    Propose Change
+                  </button>
+                {% else %}
+                  <a class="btn btn-sm btn-primary"
+                    href="{% url 'mdu:propose_change' header_pk=header.pk %}">
+                    Propose Change
+                  </a>
+                {% endif %}
               {% endif %}
+
+              <div class="vr d-none d-md-block mx-1" aria-hidden="true"></div>
+
+              <div class="d-flex gap-2">
+                {% if latest and data_rows %}
+                  <a class="btn btn-sm btn-outline-secondary"
+                    href="{% url 'mdu:approved_export_csv' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
+                    Export CSV
+                  </a>
+                  <a class="btn btn-sm btn-outline-secondary"
+                    href="{% url 'mdu:approved_export_json' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
+                    Export JSON
+                  </a>
+                {% else %}
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Export CSV</button>
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Export JSON</button>
+                {% endif %}
+              </div>
             </div>
+
           </div>
 
             {% if data_rows %}

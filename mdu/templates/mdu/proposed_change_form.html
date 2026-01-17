@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Propose change{% endblock %}
 {% block content %}
+{% load mdu_extras %}
 <div class="mb-3">
   <div class="text-muted small">Reference</div>
   <h3 class="mb-0">{{ header.ref_name }}</h3>
@@ -48,13 +49,92 @@
         </div>
 
         <div class="col-12">
-          <label class="form-label">Proposed data (JSON)</label>
-          {{ form.payload_json }}
-          <div class="form-text">
-            For now, edits are row-based. Column changes are planned for later.
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
+            <div>
+              <div class="text-muted small">Proposed data</div>
+              <div class="fw-semibold">Edit business values below</div>
+              <div class="text-muted small">Meta fields are steward-controlled. Makers can only update business cells.</div>
+            </div>
+
+            {% if is_maker %}
+              <button class="btn btn-sm btn-outline-primary" type="submit" name="action" value="add_row">
+                Insert new row
+              </button>
+            {% endif %}
+
+            <div class="d-flex gap-2">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">Back to reference</a>
+            </div>
+          </div>
+
+          <div class="table-responsive sticky-table mt-2">
+            <table class="table table-sm table-bordered align-middle mdu-edit-table">
+              <thead>
+                <tr class="sticky-first-row">
+                  <th class="text-nowrap">Row Type</th>
+                  <th class="text-nowrap">Operation</th>
+                  <th class="text-nowrap">Update Row ID</th>
+
+                  {% for c in visible_cols %}
+                    <th class="text-nowrap py-1 px-3">
+                      <div class="small fw-medium text-body-secondary">{{ col_labels|get_item:c|default:"" }}</div>
+                      <div class="small text-body-secondary">[<em>{{ c }}</em>]</div>
+                    </th>
+                  {% endfor %}
+
+                </tr>
+              </thead>
+
+              <tbody class="small">
+                {% for r in rows %}
+                  {# Header row is view-only for makers (labels live here). Values rows editable in business cols only. #}
+                  <tr class="{% if r.row_type|lower == 'header' %}bg-body-tertiary{% endif %}">
+                    <td class="text-nowrap">{{ r.row_type|default:"" }}</td>
+
+                    <td class="text-nowrap meta-locked">
+                      <input class="form-control form-control-sm" value="{{ r.operation|default:'' }}" disabled>
+                    </td>
+
+                    <td class="text-nowrap meta-locked">
+                      <input class="form-control form-control-sm" value="{{ r.update_rowid|default:'' }}" disabled>
+                    </td>
+
+                    {% for c in visible_cols %}
+                      {% if is_maker and r.row_type|lower == "values" %}
+                        <td>
+                          <input
+                            class="form-control form-control-sm"
+                            name="cell__{{ forloop.parentloop.counter0 }}__{{ c }}"
+                            value="{{ r|get_item:c|default:'' }}"
+                          >
+                        </td>
+                      {% else %}
+                        <td>
+                          <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
+                        </td>
+                      {% endif %}
+                    {% endfor %}
+
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="text-muted small mt-2">
+            Tip: Save draft often. Validation happens on submit.
           </div>
         </div>
+
+
+        {# Keep payload_json in the form submission but hide it from business users #}
+        <div class="d-none">
+          {{ form.payload_json }}
+        </div>
+
       </div>
+
+
 
       <div class="d-flex justify-content-end gap-2 mt-3">
         <a class="btn btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">Cancel</a>
@@ -63,4 +143,46 @@
     </form>
   </div>
 </div>
+
+
+<script>
+(function () {
+  // We will mark dirty for ANY input inside the proposed-change grid
+  // that has a name like: cell__<row_index>__string_XX
+  function isBusinessCellInput(el) {
+    if (!el || !el.name) return false;
+    return el.name.startsWith("cell__");
+  }
+
+  function markDirty(el) {
+    const td = el.closest("td");
+    if (!td) return;
+
+    // Set original value once (from initial render)
+    if (!el.dataset.orig) el.dataset.orig = el.defaultValue ?? "";
+
+    const orig = el.dataset.orig;
+    const now  = el.value ?? "";
+
+    if (now !== orig) td.classList.add("cell-dirty");
+    else td.classList.remove("cell-dirty");
+  }
+
+  // Event delegation (works for future HTMX too)
+  document.addEventListener("input", function (e) {
+    const el = e.target;
+    if (!isBusinessCellInput(el)) return;
+    if (el.disabled || el.readOnly) return;
+    markDirty(el);
+  });
+
+  // On page load, initialize dirty markers
+  window.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('input[name^="cell__"], textarea[name^="cell__"]').forEach(markDirty);
+  });
+})();
+</script>
+
+
+
 {% endblock %}

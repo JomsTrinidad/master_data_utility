@@ -89,3 +89,51 @@ table thead th a:active {
 table tbody td {
   color: rgba(33,37,41,.88);
 }
+
+/* =========================
+   Proposed change table editor (calm defaults)
+   ========================= */
+
+/* Make the grid feel “spreadsheet calm” */
+.mdu-edit-table td, .mdu-edit-table th { vertical-align: middle; }
+
+/* Baseline: original values are subtle */
+.mdu-edit-table .cell-input {
+  color: rgba(33, 37, 41, 0.55);
+  background-color: rgba(0, 0, 0, 0.01);
+}
+
+/* Focus: readable + inviting */
+.mdu-edit-table .cell-input:focus {
+  color: rgba(33, 37, 41, 0.92);
+  background-color: #fff;
+  border-color: rgba(13,110,253,.40);
+  box-shadow: 0 0 0 .15rem rgba(13,110,253,.12);
+}
+
+/* Dirty cell = user edited it */
+.mdu-edit-table td.cell-dirty .cell-input {
+  color: rgba(33, 37, 41, 0.92);
+  background-color: rgba(13,110,253,.06);
+}
+
+/* Optional: stronger dirty indicator on focus */
+.mdu-edit-table td.cell-dirty .cell-input:focus {
+  background-color: rgba(13,110,253,.10);
+}
+
+/* Locked/meta fields for makers */
+.mdu-edit-table .meta-locked .cell-input,
+.mdu-edit-table .meta-locked input,
+.mdu-edit-table .meta-locked select,
+.mdu-edit-table .meta-locked textarea {
+  background-color: rgba(0,0,0,.03) !important;
+  color: rgba(33,37,41,.50) !important;
+}
+
+/* Dirty cell highlight */
+td.cell-dirty input,
+td.cell-dirty textarea {
+  background-color: rgba(13,110,253,.08) !important;
+  color: rgba(33,37,41,.92) !important;
+}

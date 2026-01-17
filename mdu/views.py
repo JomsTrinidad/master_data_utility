@@ -17,6 +17,8 @@ from .permissions import group_required, in_group
 from .services import payload_rows, derive_business_columns, generate_loader_artifacts
 from django.db.models import Exists, OuterRef
 from django.urls import reverse
+from .validators import validate_change_request_payload, validate_update_rowids_against_latest_hash
+from .validators import validate_update_rowids_against_latest
 
 
 def _crumb(label, url=None):
@@ -174,8 +176,10 @@ def header_detail(request, pk):
             "cert_expires_on": cert_expires_on,
             "cert_certified_on": cert_certified_on,
             "cert_version": cert_version,
+            **_role_flags(request.user),
         },
     )
+
 
 @group_required("maker", "steward", "approver")
 def proposed_change_list(request):
@@ -217,11 +221,84 @@ def _suggest_tracking_id():
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
 
-    if header.status == MDUHeader.Status.RETIRED:
-        messages.warning(request, "This reference is retired. You can still propose a change, but it must be flagged as an override.")
+    # Prevent conflicts: only one SUBMITTED change at a time
+    if header.changes.filter(status=ChangeRequest.Status.SUBMITTED).exists():
+        messages.error(
+            request,
+            "A pending change already exists for this reference. Please wait for approval/rejection before proposing a new change."
+        )
+        return redirect("mdu:header_detail", pk=header.pk)
 
+    if header.status == MDUHeader.Status.RETIRED:
+        messages.warning(
+            request,
+            "This reference is retired. You can still propose a change, but it must be flagged as an override."
+        )
+
+    # ----------------------------
+    # POST: Insert row / Save draft
+    # ----------------------------
     if request.method == "POST":
-        form = ProposedChangeForm(request.POST)
+        post = request.POST.copy()
+
+        # Apply table cell edits into payload_json
+        post["payload_json"] = _apply_cell_edits_to_payload_json(
+            post.get("payload_json", ""),
+            post
+        )
+
+        action = post.get("action")
+
+        # Insert new row (no DB save)
+        if action == "add_row":
+            try:
+                obj = json.loads(post.get("payload_json", "") or "{}")
+            except Exception:
+                obj = {}
+
+            rows_list = obj.get("rows", [])
+            if not isinstance(rows_list, list):
+                rows_list = []
+
+            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+            for i in range(1, 66):
+                new_row[f"string_{i:02d}"] = ""
+
+            rows_list.append(new_row)
+            obj["rows"] = rows_list
+            post["payload_json"] = json.dumps(obj, indent=2)
+
+            form = ProposedChangeForm(post)
+
+            # Recompute table layout for render
+            payload = post["payload_json"]
+            rows = payload_rows(payload)
+
+            header_row = next(
+                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+                {}
+            ) or {}
+
+            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
+
+            return render(request, "mdu/proposed_change_form.html", {
+                "header": header,
+                "form": form,
+                "rows": rows,
+                "visible_cols": visible_cols,
+                "col_labels": col_labels,
+                "breadcrumbs": [
+                    _crumb("Catalog", reverse("mdu:catalog")),
+                    _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+                    _crumb("Propose Change", None),
+                ],
+                **_role_flags(request.user)
+            })
+
+        # Save draft (DB write)
+        form = ProposedChangeForm(post)
         if form.is_valid():
             ch = form.save(commit=False)
             ch.header = header
@@ -232,15 +309,30 @@ def propose_change(request, header_pk):
             ch.save()
             messages.success(request, "Draft saved. Review the table, then submit when ready.")
             return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+        # If invalid, fall through to re-render with errors
+        payload = post.get("payload_json", "")
+        rows = payload_rows(payload)
+
+    # ----------------------------
+    # GET: initialize from latest approved
+    # ----------------------------
     else:
-        # Option B: prefill from latest approved sample
         if header.last_approved_change and header.last_approved_change.payload_json:
             initial_payload = header.last_approved_change.payload_json
         else:
             initial_payload = json.dumps({
                 "rows": [
-                    {"row_type":"header","operation":"BUILD NEW","start_dt":"","end_dt":"","version":"",
-                     "string_01":"BUS_FIELD_01","string_02":"BUS_FIELD_02","string_03":"BUS_FIELD_03"}
+                    {
+                        "row_type": "header",
+                        "operation": "BUILD NEW",
+                        "start_dt": "",
+                        "end_dt": "",
+                        "version": "",
+                        "string_01": "BUS_FIELD_01",
+                        "string_02": "BUS_FIELD_02",
+                        "string_03": "BUS_FIELD_03",
+                    }
                 ]
             }, indent=2)
 
@@ -250,16 +342,35 @@ def propose_change(request, header_pk):
             "payload_json": initial_payload
         })
 
+        payload = initial_payload
+        rows = payload_rows(payload)
+
+    # ----------------------------
+    # Shared render (GET or invalid POST)
+    # ----------------------------
+    header_row = next(
+        (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+        {}
+    ) or {}
+
+    string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+    visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+    col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
+
     return render(request, "mdu/proposed_change_form.html", {
-    "header": header,
-    "form": form,
-    "breadcrumbs": [
-        _crumb("Catalog", reverse("mdu:catalog")),
-        _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
-        _crumb("Propose Change", None),
-    ],
-    **_role_flags(request.user)
+        "header": header,
+        "form": form,
+        "rows": rows,
+        "visible_cols": visible_cols,
+        "col_labels": col_labels,
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+            _crumb("Propose Change", None),
+        ],
+        **_role_flags(request.user)
     })
+
 
 
 @group_required("maker", "steward", "approver")
@@ -284,36 +395,113 @@ def proposed_change_detail(request, pk):
         **_role_flags(request.user)
     })
 
-
 @group_required("maker")
 def proposed_change_edit(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
+
     if ch.status != ChangeRequest.Status.DRAFT:
         messages.error(request, "Only drafts can be edited.")
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
+    header = ch.header
+
     if request.method == "POST":
-        form = ProposedChangeForm(request.POST, instance=ch)
+        post = request.POST.copy()
+
+        post["payload_json"] = _apply_cell_edits_to_payload_json(
+            post.get("payload_json", ""),
+            post
+        )
+
+        action = post.get("action")
+
+        if action == "add_row":
+            try:
+                obj = json.loads(post.get("payload_json", "") or "{}")
+            except Exception:
+                obj = {}
+
+            rows_list = obj.get("rows", [])
+            if not isinstance(rows_list, list):
+                rows_list = []
+
+            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+            for i in range(1, 66):
+                new_row[f"string_{i:02d}"] = ""
+
+            rows_list.append(new_row)
+            obj["rows"] = rows_list
+            post["payload_json"] = json.dumps(obj, indent=2)
+
+            form = ProposedChangeForm(post, instance=ch)
+
+            payload = post["payload_json"]
+            rows = payload_rows(payload)
+
+            header_row = next(
+                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+                {}
+            ) or {}
+
+            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
+
+            return render(request, "mdu/proposed_change_form.html", {
+                "header": header,
+                "form": form,
+                "rows": rows,
+                "visible_cols": visible_cols,
+                "col_labels": col_labels,
+                "editing": True,
+                "breadcrumbs": [
+                    _crumb("Catalog", reverse("mdu:catalog")),
+                    _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+                    _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
+                    _crumb("Edit", None),
+                ],
+                **_role_flags(request.user)
+            })
+
+        form = ProposedChangeForm(post, instance=ch)
         if form.is_valid():
             form.save()
             messages.success(request, "Draft updated.")
             return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+        payload = post.get("payload_json", "")
+        rows = payload_rows(payload)
+
     else:
         form = ProposedChangeForm(instance=ch)
+        payload = ch.payload_json or ""
+        rows = payload_rows(payload)
+
+    header_row = next(
+        (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+        {}
+    ) or {}
+
+    string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+    visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+    col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
 
     return render(request, "mdu/proposed_change_form.html", {
-    "header": ch.header,
-    "form": form,
-    "editing": True,
-    "ch": ch,
-    "breadcrumbs": [
-        _crumb("Catalog", reverse("mdu:catalog")),
-        _crumb(ch.header.ref_name, reverse("mdu:header_detail", kwargs={"pk": ch.header.pk})),
-        _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
-        _crumb("Edit", None),
-    ],
-    **_role_flags(request.user)
+        "header": header,
+        "form": form,
+        "rows": rows,
+        "visible_cols": visible_cols,
+        "col_labels": col_labels,
+        "editing": True,
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+            _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
+            _crumb("Edit", None),
+        ],
+        **_role_flags(request.user)
     })
+
 
 
 @group_required("maker")
@@ -330,21 +518,25 @@ def proposed_change_submit(request, pk):
         messages.error(request, "This reference is retired. To proceed, set 'Override retired' to Y.")
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
-    # Block rowid in payload (loader rule)
-    try:
-        data = json.loads(ch.payload_json or "{}")
-    except Exception:
-        data = {}
-    rows = data.get("rows") if isinstance(data, dict) else None
-    if isinstance(rows, list):
-        for r in rows:
-            if isinstance(r, dict) and r.get("rowid"):
-                messages.error(request, "Row ID must not be provided. Please remove 'rowid' from the data.")
-                return redirect("mdu:proposed_change_detail", pk=ch.pk)
+    # Submit-time guard rails (aligned to loader)
+    errors, warnings = validate_change_request_payload(header=ch.header, change_request=ch)
+
+    e2, w2 = validate_update_rowids_against_latest(header=ch.header, change_request=ch)
+    errors.extend(e2)
+    warnings.extend(w2)
+
+    for w in warnings:
+        messages.warning(request, w)
+
+    if errors:
+        for e in errors:
+            messages.error(request, e)
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
 
     ch.status = ChangeRequest.Status.SUBMITTED
     ch.submitted_at = timezone.now()
-    ch.save(update_fields=["status","submitted_at","tracking_id","updated_at"])
+    ch.save(update_fields=["status", "submitted_at", "tracking_id", "updated_at"])
     messages.success(request, "Submitted for approval.")
     return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
@@ -440,3 +632,33 @@ def _safe_rows(payload_json: str):
         return []
 
 
+def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
+    """
+    Takes existing payload_json and applies table cell edits from POST inputs:
+    cell__<row_index>__<colname> = value
+    Returns updated payload_json string.
+    """
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        obj = {}
+
+    rows = obj.get("rows", [])
+    if not isinstance(rows, list):
+        rows = []
+
+    # Apply edits
+    for key, val in post_data.items():
+        if not key.startswith("cell__"):
+            continue
+        try:
+            _, idx_str, col = key.split("__", 2)
+            idx = int(idx_str)
+        except Exception:
+            continue
+
+        if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
+            rows[idx][col] = val
+
+    obj["rows"] = rows
+    return json.dumps(obj, indent=2)
