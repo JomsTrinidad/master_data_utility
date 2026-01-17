@@ -1,0 +1,91 @@
+/* =========================
+   Global helpers
+   ========================= */
+.card-body { min-width: 0; } /* allows children to shrink inside cards */
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+}
+
+.badge-soft {
+  background: rgba(13,110,253,.08);
+  color: rgba(13,110,253,.95);
+  border: 1px solid rgba(13,110,253,.15);
+}
+
+.modal-wide { max-width: 95vw !important; }
+
+.table-sticky th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+}
+
+/* Clickable rows */
+.clickable-row { cursor: pointer; }
+.clickable-row:focus { outline: 2px solid rgba(13,110,253,.28); outline-offset: -2px; }
+
+/* =========================
+   Catalog table containment + truncation
+   ========================= */
+.catalog-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.catalog-table-wrap table {
+  width: 100%;
+  table-layout: auto; /* required for ellipsis behavior in cells */
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1200px){
+  .col-desc { width: 20rem; }
+  .col-refname { width: 12rem; }
+}
+
+@media (max-width: 992px){
+  .col-desc { width: 16rem; }
+  .col-refname { width: 10rem; }
+}
+
+/* Catalog action buttons */
+.catalog-action-buttons .btn { white-space: nowrap; }
+
+/* =========================
+   Table styling
+   ========================= */
+
+/* Tone down header visuals */
+table thead th {
+  background-color: rgba(0,0,0,.025);
+  color: rgba(33,37,41,.50);       /* softer; try .55 if you want lighter */
+  font-weight: 600;
+  border-bottom-color: rgba(0,0,0,.08);
+
+  /* Bootstrap link vars (prevents "linky" header vibe) */
+  --bs-link-color: inherit;
+  --bs-link-hover-color: inherit;
+}
+
+/* Sortable headers (django-tables2 uses <a> in <th>) */
+table thead th a,
+table thead th a:visited,
+table thead th a:hover,
+table thead th a:focus,
+table thead th a:active {
+  color: inherit !important;
+  text-decoration: none !important;
+}
+
+/* Keep body text slightly softer */
+table tbody td {
+  color: rgba(33,37,41,.88);
+}

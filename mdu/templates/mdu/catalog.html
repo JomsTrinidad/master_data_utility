@@ -13,9 +13,9 @@
 <div class="card shadow-sm mb-3">
   <div class="card-body">
 
+    <form method="get" class="mb-2">
+      <div class="row g-2 align-items-end">
 
-    <form method="get" class="mb-3">
-      <div class="row g-2">
         <div class="col-12 col-md-4">
           <label class="form-label small text-muted mb-1">Search</label>
           {{ filter.form.q }}
@@ -38,16 +38,13 @@
 
         <div class="col-12 col-md-2">
           <label class="form-label small text-muted mb-1 d-none d-md-block">&nbsp;</label>
-
-          <div class="d-flex gap-2 flex-nowrap" style="padding-bottom: 2px;">
-            <button class="btn btn-primary flex-fill" type="submit">Apply</button>
-            <a class="btn btn-outline-secondary flex-fill" href="{% url 'mdu:catalog' %}">Reset</a>
+          <div class="d-flex gap-2 flex-wrap catalog-action-buttons">
+            <button class="btn btn-primary" type="submit">Apply</button>
+            <a class="btn btn-outline-secondary" href="{% url 'mdu:catalog' %}">Reset</a>
           </div>
         </div>
 
-
       </div>
-      
 
       <div class="form-check mt-2">
         <input class="form-check-input" type="checkbox" name="include_all" value="1" id="includeAll"
@@ -56,17 +53,15 @@
           Show non-active
         </label>
       </div>
-      
     </form>
-
-
 
   </div>
 </div>
 
 <div class="card shadow-sm">
-  <div class="card-body">
+  <div class="table-responsive catalog-table-wrap">
     {% render_table table %}
   </div>
 </div>
+
 {% endblock %}

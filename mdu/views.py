@@ -15,7 +15,12 @@ from .tables import HeaderTable, ProposedChangeTable, CertTable
 from .forms import ProposedChangeForm, CertForm
 from .permissions import group_required, in_group
 from .services import payload_rows, derive_business_columns, generate_loader_artifacts
+from django.db.models import Exists, OuterRef
+from django.urls import reverse
 
+
+def _crumb(label, url=None):
+    return {"label": label, "url": url}
 
 def _role_flags(user):
     return {
@@ -27,6 +32,12 @@ def _role_flags(user):
 @login_required
 def catalog(request):
     qs = MDUHeader.objects.all().order_by("ref_name")
+
+    pending_submitted = ChangeRequest.objects.filter(
+        header_id=OuterRef("pk"),
+        status="SUBMITTED",
+    )
+    qs = qs.annotate(has_pending=Exists(pending_submitted))
 
     # UX default: show Active only, unless user explicitly asks to include other statuses
     include_all = request.GET.get("include_all") in ("1", "true", "True", "on")
@@ -142,6 +153,10 @@ def header_detail(request, pk):
         "mdu/header_detail.html",
         {
             "header": header,
+            "breadcrumbs": [
+                _crumb("Catalog", reverse("mdu:catalog")),
+                _crumb(header.ref_name, None),
+            ],
             "latest": latest,
             "current_version": current_version,
             "data_rows": data_rows,
@@ -168,7 +183,15 @@ def proposed_change_list(request):
     f = ProposedChangeFilter(request.GET, queryset=qs)
     table = ProposedChangeTable(f.qs)
     RequestConfig(request, paginate={"per_page": 15}).configure(table)
-    return render(request, "mdu/proposed_change_list.html", {"filter": f, "table": table, **_role_flags(request.user)})
+    return render(request, "mdu/proposed_change_list.html", {
+        "filter": f,
+        "table": table,
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb("Proposed Changes", None),
+        ],
+        **_role_flags(request.user)
+    })
 
 
 def _next_display_id():
@@ -227,7 +250,16 @@ def propose_change(request, header_pk):
             "payload_json": initial_payload
         })
 
-    return render(request, "mdu/proposed_change_form.html", {"header": header, "form": form, **_role_flags(request.user)})
+    return render(request, "mdu/proposed_change_form.html", {
+    "header": header,
+    "form": form,
+    "breadcrumbs": [
+        _crumb("Catalog", reverse("mdu:catalog")),
+        _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+        _crumb("Propose Change", None),
+    ],
+    **_role_flags(request.user)
+    })
 
 
 @group_required("maker", "steward", "approver")
@@ -240,6 +272,11 @@ def proposed_change_detail(request, pk):
 
     return render(request, "mdu/proposed_change_detail.html", {
         "ch": ch,
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb("Proposed Changes", reverse("mdu:proposed_change_list")),
+            _crumb(ch.display_id, None),
+        ],
         "rows": rows,
         "biz_cols": biz_cols,
         "can_edit": can_edit,
@@ -264,7 +301,19 @@ def proposed_change_edit(request, pk):
     else:
         form = ProposedChangeForm(instance=ch)
 
-    return render(request, "mdu/proposed_change_form.html", {"header": ch.header, "form": form, "editing": True, "ch": ch, **_role_flags(request.user)})
+    return render(request, "mdu/proposed_change_form.html", {
+    "header": ch.header,
+    "form": form,
+    "editing": True,
+    "ch": ch,
+    "breadcrumbs": [
+        _crumb("Catalog", reverse("mdu:catalog")),
+        _crumb(ch.header.ref_name, reverse("mdu:header_detail", kwargs={"pk": ch.header.pk})),
+        _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
+        _crumb("Edit", None),
+    ],
+    **_role_flags(request.user)
+    })
 
 
 @group_required("maker")
@@ -351,7 +400,14 @@ def cert_list(request):
     qs = MDUCert.objects.select_related("header").order_by("-created_at")
     table = CertTable(qs)
     RequestConfig(request, paginate={"per_page": 15}).configure(table)
-    return render(request, "mdu/cert_list.html", {"table": table, **_role_flags(request.user)})
+    return render(request, "mdu/cert_list.html", {
+    "table": table,
+    "breadcrumbs": [
+        _crumb("Catalog", reverse("mdu:catalog")),
+        _crumb("Certifications", None),
+    ],
+    **_role_flags(request.user)
+    })
 
 
 @group_required("steward", "approver")
@@ -364,7 +420,15 @@ def cert_create(request):
             return redirect("mdu:cert_list")
     else:
         form = CertForm()
-    return render(request, "mdu/cert_form.html", {"form": form, **_role_flags(request.user)})
+    return render(request, "mdu/cert_form.html", {
+    "form": form,
+    "breadcrumbs": [
+        _crumb("Catalog", reverse("mdu:catalog")),
+        _crumb("Certifications", reverse("mdu:cert_list")),
+        _crumb("New", None),
+    ],
+    **_role_flags(request.user)
+    })
 
 
 def _safe_rows(payload_json: str):
@@ -374,3 +438,5 @@ def _safe_rows(payload_json: str):
         return rows if isinstance(rows, list) else []
     except Exception:
         return []
+
+
