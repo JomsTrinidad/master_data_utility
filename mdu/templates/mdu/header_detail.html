@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% load mdu_extras %}
+
+{% block title %}{{ header.ref_name }} | Reference{% endblock %}
+
+{% block content %}
+
+
+
+
+<div class="container py-3">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+      <h3 class="mb-1">{{ header.ref_name }}</h3>
+      <div class="text-muted">
+        Reference detail (Set to view-only unless user logged in has an action role i.e.: Steward, Approver)
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      {# Optional: show action buttons if you already have them wired #}
+      {% if can_propose and header.status != "RETIRED" %}
+        <a class="btn btn-primary btn-sm" href="{% url 'mdu:proposed_change_create' header.pk %}">
+          Propose change
+        </a>
+      {% elif header.status == "RETIRED" %}
+        <button class="btn btn-secondary btn-sm" disabled>Retired (read-only)</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Accordion: one-page, screenshot-friendly -->
+  <div class="accordion" id="refDetailAccordion">
+
+    <!-- OVERVIEW -->
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingOverview">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOverview" aria-expanded="true" aria-controls="collapseOverview">
+          Overview
+        </button>
+      </h2>
+      <div id="collapseOverview" class="accordion-collapse collapse show" aria-labelledby="headingOverview">
+
+      <div class="accordion-body">
+
+        <!-- Top summary strip -->
+
+        <!-- Pending change banner (quiet but obvious) -->
+        {% if pending_change %}
+          <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+              <div class="fw-semibold">Pending change awaiting approval</div>
+              <div class="small text-muted">
+                {{ pending_change.display_id }}
+                {% if pending_change.submitted_at %} — submitted {{ pending_change.submitted_at }}{% endif %}
+                {% if pending_change.change_reason %} — {{ pending_change.change_reason }}{% endif %}
+              </div>
+            </div>
+
+            <a class="btn btn-sm btn-outline-dark"
+              href="#"
+              hx-get="{% url 'mdu:change_modal' pending_change.pk %}"
+              hx-target="#change-modal-content"
+              data-bs-toggle="modal"
+              data-bs-target="#changeModal">
+              View pending change
+            </a>
+          </div>
+        {% endif %}
+
+        <div class="row g-3 align-items-stretch">
+
+          <!-- Card 1: Identity -->
+          <div class="col-lg-4">
+            <div class="p-3 rounded-3 bg-light h-100">
+              <div class="text-muted large text-uppercase mb-3" style="letter-spacing: 0.3em;">Identity</div>
+
+              <div class="mb-2">
+                <div class="text-muted small">Reference name</div>
+                <div class="fw-semibold">{{ header.ref_name }}</div>
+              </div>
+
+              <div class="row g-2">
+                <div class="col-6">
+                  <div class="text-muted small">Type</div>
+                  <div class="fw-semibold">{{ header.ref_type|default:"—"|upper }}</div>
+                </div>
+                <div class="col-6">
+                  <div class="text-muted small">Mode</div>
+                  <div class="fw-semibold">{{ header.mode|default:"—"|title }}</div>
+                </div>
+                <div class="col-6">
+                  <div class="text-muted small">Current version</div>
+                  <div class="fw-semibold">
+                    {% if current_version is not None %}{{ current_version }}{% else %}—{% endif %}
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="text-muted small">Status</div>
+                  <div>
+                    <span class="badge bg-{{ header.status|status_badge_color }}">
+                      {{ header.get_status_display|default:header.status }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Lifecycle -->
+          <div class="col-lg-4">
+            <div class="p-3 rounded-3 bg-light h-100">
+              <div  class="text-muted large text-uppercase mb-3" style="letter-spacing: .3em;">Lifecycle</div>
+
+              <div class="row g-2">
+                <div class="col-6">
+                  <div class="text-muted small">Created</div>
+                  <div class="fw-semibold">
+                    {% if header.created_at %}{{ header.created_at }}{% else %}—{% endif %}
+                  </div>
+                </div>
+
+                <div class="col-6">
+                  <div class="text-muted small">Last updated</div>
+                  <div class="fw-semibold">
+                    {% if header.updated_at %}{{ header.updated_at }}{% else %}—{% endif %}
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="text-muted small">Latest approved change</div>
+                  <div class="fw-semibold">
+                    {% if latest %}
+                      <a href="#"
+                        hx-get="{% url 'mdu:change_modal' latest.pk %}"
+                        hx-target="#change-modal-content"
+                        data-bs-toggle="modal"
+                        data-bs-target="#changeModal">
+                        {{ latest.display_id }}
+                      </a>
+                      <span class="text-muted small">
+                        {% if latest.decided_at %} — approved {{ latest.decided_at }}{% endif %}
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="text-muted small">Owner group</div>
+                  <div class="fw-semibold">{{ header.owner_group|default:"—" }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Governance -->
+          <div class="col-lg-4">
+           
+            <div class="p-3 rounded-3 bg-light h-100">
+              <div  class="text-muted large text-uppercase mb-3" style="letter-spacing: .3em;">Governance</div>
+
+
+              <div class="mb-2">
+                <div class="text-muted small">Certification</div>
+                <div class="fw-semibold">
+                  <span class="badge bg-{{ cert_badge_class }}">{{ cert_label }}</span>
+
+                  {% if cert_version %}
+                    <span class="text-muted small"> — v{{ cert_version }}</span>
+                  {% endif %}
+
+                  {% if cert_expires_on %}
+                    <span class="text-muted small"> — expires {{ cert_expires_on }}</span>
+                  {% endif %}
+                </div>
+
+                {% if cert_certified_on %}
+                  <div class="text-muted small mt-1">Last certified: {{ cert_certified_on }}</div>
+                {% endif %}
+              </div>
+
+
+              <div class="row g-2">
+                <div class="col-12">
+                  <div class="text-muted small">Primary approver</div>
+                  <div class="fw-semibold">
+                    {% if latest and latest.primary_approver_sid %}{{ latest.primary_approver_sid }}{% else %}—{% endif %}
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="text-muted small">Risk impact</div>
+                  <div class="fw-semibold">
+                    {% if latest and latest.risk_impact %}{{ latest.risk_impact }}{% else %}—{% endif %}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+
+          <!-- Description (full width, readable) -->
+          <div class="col-12">
+            <div class="p-3 rounded-3 bg-body-tertiary">
+              <div class="text-muted small mb-1">Description</div>
+              <div class="text-break" style="line-height: 1.6;">
+                {% if header.description %}{{ header.description }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+      </div>
+
+    </div>
+
+    <!-- APPROVED DATA (full dataset) -->
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingApproved">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseApproved" aria-expanded="false" aria-controls="collapseApproved">
+          Approved data
+        </button>
+      </h2>
+      <div id="collapseApproved" class="accordion-collapse collapse" aria-labelledby="headingApproved">
+        <div class="accordion-body">
+
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div class="text-muted small">
+              Full dataset from the latest approved change.
+            </div>
+
+            <div class="d-flex gap-2">
+              {% if latest and data_rows %}
+                <a class="btn btn-sm btn-outline-secondary"
+                  href="{% url 'mdu:approved_export_csv' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
+                  Export CSV
+                </a>
+                <a class="btn btn-sm btn-outline-secondary"
+                  href="{% url 'mdu:approved_export_json' header.pk %}?cols={{ visible_cols|join:","|urlencode }}">
+                  Export JSON
+                </a>
+              {% else %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                  Export CSV
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                  Export JSON
+                </button>
+                <div class="small text-muted mt-1">Exports appear after a change is approved.</div>
+              {% endif %}
+            </div>
+          </div>
+
+            {% if data_rows %}
+            <div class="table-responsive sticky-table">
+              <table class="table table-sm table-striped table-bordered align-middle">
+                <thead>
+                  <tr class="sticky-first-row">
+                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">ref_name</th>
+                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">row_type</th>
+                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">mode</th>
+
+                    {% if header.mode != "snapshot" %}
+                      <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">start_date</th>
+                      <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">end_date</th>
+                    {% endif %}
+
+                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">current_version</th>
+
+                    {% for c in visible_cols %}
+                      <th class="small text-nowrap py-1 px-3 fw-medium text-body-secondary text-primary-emphasis">
+                        <div class="small text-body-secondary fw-medium text-primary-emphasis">{{ col_labels|get_item:c|default:"" }}</div>
+                        <div class="small text-body-secondary fw-medium text-primary-emphasis">[<em>{{ c }}</em>]</div>
+
+                      </th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+
+                <tbody class="small text-body-secondary fw-normal">
+                  {% for r in data_rows %}
+                    <tr class="{% if r.row_type|lower == 'header' %}table-light{% endif %}">
+                      <td class="text-nowrap">{{ header.ref_name }}</td>
+                      <td class="text-nowrap">{{ r.row_type|default:"" }}</td>
+                      <td class="text-nowrap">{{ header.mode|default:"—" }}</td>
+
+                      {% if header.mode != "snapshot" %}
+                        <td class="text-nowrap">{{ r.start_dt|default:"" }}</td>
+                        <td class="text-nowrap">{{ r.end_dt|default:"" }}</td>
+                      {% endif %}
+
+                      <td class="text-nowrap" style="padding-left: 1rem;">
+                        {% if latest %}{{ latest.version }}{% else %}—{% endif %}
+                      </td>
+
+                      {% for c in visible_cols %}
+                        <td>{{ r|get_item:c }}</td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="alert alert-secondary mb-0">No approved data yet.</div>
+          {% endif %}
+
+
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- CHANGE HISTORY -->
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingHistory">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHistory" aria-expanded="false" aria-controls="collapseHistory">
+          Change history
+        </button>
+      </h2>
+      <div id="collapseHistory" class="accordion-collapse collapse" aria-labelledby="headingHistory">
+        <div class="accordion-body">
+
+          <div class="text-muted small mb-2">
+            Click an ID to view the audit diff (before vs after).
+          </div>
+
+          <ul class="mb-0">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="text-muted small">
+                Click an ID to view audit details.
+              </div>
+
+              <a class="btn btn-sm btn-outline-secondary"
+                href="#"
+                hx-get="{% url 'mdu:compare_modal' header.pk %}"
+                hx-target="#compare-modal-content"
+                data-bs-toggle="modal"
+                data-bs-target="#compareModal">
+                Compare versions
+              </a>
+            </div>
+
+
+            {% for ch in changes %}
+              <li class="mb-1">
+                <a
+                  href="#"
+                  hx-get="{% url 'mdu:change_modal' ch.pk %}"
+                  hx-target="#change-modal-content"
+                  data-bs-toggle="modal"
+                  data-bs-target="#changeModal"
+                >
+                  {{ ch.display_id }}
+                </a>
+                <span class="text-muted small">
+                  — {{ ch.get_status_display|default:ch.status }}
+                  {% if ch.created_at %} — {{ ch.created_at }}{% endif %}
+                </span>
+              </li>
+            {% empty %}
+              <li class="text-muted">No changes yet.</li>
+            {% endfor %}
+          </ul>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- CERTIFICATIONS -->
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingCerts">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCerts" aria-expanded="false" aria-controls="collapseCerts">
+          Certifications
+        </button>
+      </h2>
+      <div id="collapseCerts" class="accordion-collapse collapse" aria-labelledby="headingCerts">
+        <div class="accordion-body">
+
+        {% if latest_cert.cert_version %}
+          <span class="badge text-bg-secondary">v{{ latest_cert.cert_version }}</span>
+        {% endif %}
+
+          {% if certs %}
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered align-middle">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Scope</th>
+                    <th>Certified by</th>
+                    <th>Certified</th>
+                    <th>Expiry</th>
+                    <th>Evidence</th>
+                    <th>Version</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for c in certs %}
+                    <tr>
+                      <td class="text-nowrap">
+                        {{ c.certification_status|default:"—" }}
+                      </td>
+                      <td>{{ c.certification_scope|default:"—" }}</td>
+                      <td>{{ c.certified_by_sid|default:"—" }}</td>
+                      <td class="text-nowrap">{{ c.certified_dttm|default:"—" }}</td>
+                      <td class="text-nowrap">
+                        {{ c.cert_expiry_dttm|default:"—" }}
+                      </td>
+                      <td>
+                        {% if c.evidence_link %}
+                          <a href="{{ c.evidence_link }}" target="_blank" rel="noopener">Open</a>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="text-muted">No certifications yet.</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Modal (must be INSIDE block content) -->
+<div class="modal fade" id="changeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-wide">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Change details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="change-modal-content">
+        <div class="text-muted">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="compareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-wide">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Compare versions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="compare-modal-content">
+        <div class="text-muted">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* ===== Container ===== */
+.sticky-table {
+  --header-height: 54px;
+  max-height: 70vh;
+  overflow: auto;
+  background: #fff;
+}
+
+/* Kill collapsed-border artifacts */
+.sticky-table table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 1px solid #dee2e6;
+}
+
+/* ===== Shared sticky cell base ===== */
+.sticky-table thead th,
+.sticky-table tbody tr.sticky-first-row td {
+  position: sticky;
+  background-clip: padding-box;
+  border: 1px solid #dee2e6;
+}
+
+/* ===== Header ===== */
+.sticky-table thead th {
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+
+}
+
+/* ===== First body row ===== */
+.sticky-table tbody tr.sticky-first-row td {
+  top: var(--header-height);
+  z-index: 4;
+  background: #fff;
+
+}
+
+/* ===== Vertical borders for non-sticky body cells ===== */
+.sticky-table tbody td {
+  border-left: 1px solid #dee2e6;
+  border-right: 1px solid #dee2e6;
+}
+
+.sticky-table tbody tr:first-child td {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 4;
+  background: #fff;
+  background-clip: padding-box;
+  border: 1px solid #dee2e6;
+}
+
+.accordion-button.collapsed {
+  background-image: linear-gradient(
+    to right,
+    rgba(13, 110, 253, 0.06),
+    rgba(13, 110, 253, 0)
+  );
+}
+</style>
+
+
+{% endblock %}
+
+

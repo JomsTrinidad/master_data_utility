@@ -1,0 +1,202 @@
+{% load mdu_extras %}
+
+<div class="mb-2">
+  <div class="fw-semibold">{{ header.ref_name }}</div>
+  <div class="text-muted small">Compare two approved versions</div>
+</div>
+
+<form
+  class="border rounded p-2 mb-3 bg-light-subtle"
+  hx-get="{% url 'mdu:compare_modal' header.pk %}"
+  hx-target="#compare-modal-content"
+>
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-md-4">
+      <label class="form-label small text-muted mb-1">Left version</label>
+      <select name="left" class="form-select">
+        {% for c in approved %}
+          <option value="{{ c.version }}"
+            {% if left and c.version == left.version %}selected{% endif %}
+            {% if not left and latest_version and c.version == latest_version %}selected{% endif %}
+          >
+            v{{ c.version }} — {{ c.display_id }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label small text-muted mb-1">Right version</label>
+      <select name="right" class="form-select">
+        <option value="">Select…</option>
+        {% for c in approved %}
+          <option value="{{ c.version }}" {% if right and c.version == right.version %}selected{% endif %}>
+            v{{ c.version }} — {{ c.display_id }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12 col-md-4 d-flex gap-2">
+      <button class="btn btn-primary" type="submit">Compare</button>
+      <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button>
+    </div>
+  </div>
+</form>
+
+<div class="form-check mb-2">
+  <input class="form-check-input" type="checkbox" id="changedOnlyToggle">
+  <label class="form-check-label small" for="changedOnlyToggle">
+    Show changed rows only
+  </label>
+</div>
+
+
+{% if diff_rows %}
+  <h6 class="mb-2">Differences</h6>
+  <div class="text-muted small mb-2">Left = before, Right = after</div>
+
+  <div class="diff-table-wrapper">
+    <table class="table table-sm table-bordered diff-table align-middle w-100">
+      <thead>
+        <tr>
+        
+
+          <th class="text-nowrap">Row</th>
+          {% for col in biz_cols %}
+            <th class="text-nowrap">
+              <div class="small text-muted"><em>{{ col.tech }}</em></div>
+              <div>{{ col.biz }}</div>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in diff_rows %}
+          <tr>
+            <td class="text-nowrap">{{ r.key }}</td>
+            {% for c in r.cells %}
+              <td>
+
+                  <div class="d-flex gap-2 h-100 diff-pair">
+                    <div class="p-2 rounded before-cell flex-fill">
+                      {{ c.before|default:"" }}
+                    </div>
+
+                    <div class="diff-arrow text-muted">→</div>
+
+                    <div class="p-2 rounded after-cell flex-fill">
+                      {{ c.after|default:"" }}
+                    </div>
+                  </div>
+
+
+                {% if c.changed %}
+                  <div class="small mt-1" style="color: #28a745;">changed</div>
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  
+<style>
+  /* ===== WRAPPER CONTROLS SCROLLING ===== */
+  .diff-table-wrapper{
+    max-height: 60vh;
+    overflow: auto;             /* vertical + horizontal scroll in one place */
+    border: 1px solid #dee2e6;
+    background: #fff;
+  }
+
+  /* ===== TABLE ===== */
+  .diff-table{
+    table-layout: auto;
+    width: 100%;
+    min-width: 1200px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  /* Force the header row to always be visible */
+  .diff-table thead{
+    display: table-header-group; /* <-- this prevents "header disappears" scenarios */
+  }
+
+  /* ===== STICKY HEADER ===== */
+  .diff-table thead th{
+    position: sticky;
+    top: 0;
+    z-index: 10;                /* keep it above cell contents */
+    background: #f8f9fa;
+    box-shadow: inset 0 -2px 0 #dee2e6; /* visible bottom line even when sticky */
+  }
+
+  /* ===== CELLS ===== */
+  .diff-table th,
+  .diff-table td{
+    padding: 0.5rem;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* ===== BEFORE / AFTER PAIR ===== */
+  .diff-pair {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .before-cell {
+    background-color: #f2f2f2;
+    color: #444;
+    border: 1px solid #d6d6d6;
+    padding: 0.5rem;
+    min-width: 160px;
+    flex: 1 1 0;
+  }
+
+  .after-cell {
+    background-color: #ffffff;
+    color: #111;
+    border: 1px solid #cfcfcf;
+    padding: 0.5rem;
+    min-width: 160px;
+    flex: 1 1 0;
+  }
+
+  .diff-arrow {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #888;
+  }
+
+  /* ===== CHANGED-ONLY ===== */
+  .diff-row-unchanged {
+    display: none;
+  }
+</style>
+
+
+
+<script>
+  document.addEventListener("change", function (e) {
+    if (e.target.id === "changedOnlyToggle") {
+      document.querySelectorAll(".diff-row-unchanged").forEach(row => {
+        row.style.display = e.target.checked ? "none" : "";
+      });
+    }
+  });
+</script>
+
+
+
+{% else %}
+  <div class="text-muted">Pick a right version to compare against the latest.</div>
+{% endif %}

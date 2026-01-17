@@ -1,0 +1,97 @@
+{% load mdu_extras %}
+
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <div>
+    <div class="fw-semibold">{{ change.display_id }}</div>
+    <div class="text-muted small">{{ header.ref_name }} — {{ change.get_status_display }}</div>
+  </div>
+
+  <div class="text-muted small text-end">
+    {% if change.submitted_at %}Submitted: {{ change.submitted_at }}{% endif %}
+    {% if change.decided_at %}<br>Decided: {{ change.decided_at }}{% endif %}
+  </div>
+</div>
+
+<div class="border rounded p-3 mb-3 bg-light-subtle">
+  <div class="card-inner">
+    <!-- Top: quick scan (GRID so it wraps like the section below) -->
+    <div class="row g-3 align-items-start mb-2">
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Change</div>
+        <div class="fw-semibold">
+          {{ change.display_id|default:"Change" }}
+          {% if change.version is not None %}
+            <span class="text-muted fw-normal"> · v{{ change.version }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Status</div>
+        <div class="fw-semibold">{{ change.status|default:"—" }}</div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Operation</div>
+        <div class="fw-semibold">{{ change.operation_hint|default:"—" }}</div>
+      </div>
+    </div>
+
+    <hr class="my-2">
+
+    <!-- Middle: who + tracking -->
+    <div class="row g-3 mt-1">
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Requested by</div>
+        <div class="fw-semibold">{{ change.requested_by_sid|default:"—" }}</div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Approved by</div>
+        <div class="fw-semibold">
+          {% if change.status == "APPROVED" %}
+            {{ change.primary_approver_sid|default:"—" }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Ticket reference</div>
+        <div class="fw-semibold">{{ change.change_ticket_ref|default:"—" }}</div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="text-muted small">Category</div>
+        <div class="fw-semibold">{{ change.change_category|default:"—" }}</div>
+      </div>
+
+      <div class="col-12 col-md-8">
+        <div class="text-muted small">Tracking</div>
+        <div class="fw-semibold">{{ change.tracking_id|default:"—" }}</div>
+      </div>
+
+      <div class="col-12">
+        <div class="text-muted small">Change reason</div>
+        <div class="fw-semibold">{{ change.change_reason|default:"—" }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="my-3">
+
+<h6 class="mb-2">Audit Diff</h6>
+<div class="text-muted small mb-2">
+  Left = before (latest approved). Right = after (this change). Changed cells highlighted.
+</div>
+
+{% include "mdu/partials/change_diff.html" %}
+
+<style>
+  /* Card stays full width; content stays closer together */
+  .card-inner {
+    max-width: 1100px; /* tweak 960–1200 to taste */
+  }
+</style>

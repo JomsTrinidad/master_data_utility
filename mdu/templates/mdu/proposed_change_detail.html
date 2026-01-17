@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load mdu_extras %}
+{% block title %}{{ ch.display_id }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-muted small">Proposed change</div>
+    <h3 class="mb-1">{{ ch.display_id }}</h3>
+    <div class="text-muted">
+      Reference: <a href="{% url 'mdu:header_detail' pk=ch.header.pk %}">{{ ch.header.ref_name }}</a>
+      · Status: <span class="badge text-bg-light border">{{ ch.get_status_display }}</span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if can_edit %}
+      <a class="btn btn-outline-primary" href="{% url 'mdu:proposed_change_edit' pk=ch.pk %}">Edit</a>
+      <form method="post" action="{% url 'mdu:proposed_change_submit' pk=ch.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit">Submit for approval</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">Why this change exists</div>
+        <div class="mt-2">
+          <div><span class="text-muted">Reason:</span> {{ ch.change_reason|default:"—" }}</div>
+          <div><span class="text-muted">Ticket:</span> {{ ch.change_ticket_ref|default:"—" }}</div>
+          <div><span class="text-muted">Category:</span> {{ ch.change_category|default:"—" }}</div>
+          <div><span class="text-muted">Risk:</span> {{ ch.risk_impact|default:"—" }}</div>
+          <div><span class="text-muted">Source:</span> {{ ch.request_source_channel|default:"—" }} / {{ ch.request_source_system|default:"—" }}</div>
+        </div>
+        <hr>
+        <details>
+          <summary class="text-muted">Details</summary>
+          <div class="mt-2 small">
+            <div><span class="text-muted">Tracking:</span> <span class="mono">{{ ch.tracking_id|default:"—" }}</span></div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    {% if can_decide %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <div class="text-muted small mb-2">Approval</div>
+        <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='approve' %}" class="mb-2">
+          {% csrf_token %}
+          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Optional note (kept for audit)"></textarea>
+          <button class="btn btn-success w-100" type="submit">Approve</button>
+        </form>
+        <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='reject' %}">
+          {% csrf_token %}
+          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Optional reason"></textarea>
+          <button class="btn btn-outline-danger w-100" type="submit">Reject</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if ch.status == 'APPROVED' and is_approver %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <div class="text-muted small mb-2">Load files</div>
+        <a class="btn btn-primary w-100" href="{% url 'mdu:generate_load_files' pk=ch.pk %}">Generate load files (zip)</a>
+        <a class="btn btn-outline-secondary w-100 mt-2" href="{% url 'mdu:generate_load_files' pk=ch.pk %}?include_cert=1">Generate incl. certification (zip)</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="text-muted">Proposed data</div>
+          {% if ch.status == 'DRAFT' %}
+            <span class="badge text-bg-light border">Not yet submitted</span>
+          {% endif %}
+        </div>
+
+        {% if rows %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle table-sticky">
+              <thead>
+                <tr>
+                  <th class="text-nowrap">Row type</th>
+                  <th class="text-nowrap">Operation</th>
+                  <th class="text-nowrap">Start</th>
+                  <th class="text-nowrap">End</th>
+                  {% for key,label in biz_cols %}
+                    <th class="text-nowrap">{{ label }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rows %}
+                  <tr>
+                    <td class="text-nowrap">{% if r.row_type %}{{ r.row_type|capfirst }}{% else %}Value{% endif %}</td>
+                    <td class="text-nowrap">{{ r.operation|default:"" }}</td>
+                    <td class="text-nowrap">{{ r.start_dt|default:"" }}</td>
+                    <td class="text-nowrap">{{ r.end_dt|default:"" }}</td>
+                    {% for key,label in biz_cols %}
+                      <td class="text-nowrap">{{ r|get_item:key }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No rows found in the proposed data.</div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

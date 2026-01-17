@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load mdu_extras %}
+{% block title %}Compare Versions | {{ header.ref_name }}{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+  <h3 class="mb-1">Compare versions</h3>
+  <div class="text-muted mb-3">{{ header.ref_name }}</div>
+
+  <form method="get" class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted mb-1">Left version</label>
+          <select name="v1" class="form-select">
+            <option value="">Select…</option>
+            {% for c in approved %}
+              <option value="{{ c.version }}" {% if left and c.version == left.version %}selected{% endif %}>
+                v{{ c.version }} — {{ c.display_id }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted mb-1">Right version</label>
+          <select name="v2" class="form-select">
+            <option value="">Select…</option>
+            {% for c in approved %}
+              <option value="{{ c.version }}" {% if right and c.version == right.version %}selected{% endif %}>
+                v{{ c.version }} — {{ c.display_id }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-12 col-md-4 d-flex gap-2">
+          <button class="btn btn-primary" type="submit">Compare</button>
+          <a class="btn btn-outline-secondary" href="{% url 'mdu:header_detail' header.pk %}">Back</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if diff_rows %}
+    <div class="card shadow-sm">
+      <div class="card-body">
+        {% include "mdu/partials/change_diff.html" %}
+      </div>
+    </div>
+  {% else %}
+    <div class="text-muted">Pick two approved versions to compare.</div>
+  {% endif %}
+</div>
+{% endblock %}

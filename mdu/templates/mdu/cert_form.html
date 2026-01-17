@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Add certification{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h3 class="mb-0">Add certification</h3>
+  <div class="text-muted">Keep evidence links and expiry dates up to date.</div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="d-flex justify-content-end gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'mdu:cert_list' %}">Cancel</a>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

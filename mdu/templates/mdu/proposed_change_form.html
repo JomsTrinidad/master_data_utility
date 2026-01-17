@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Propose change{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <div class="text-muted small">Reference</div>
+  <h3 class="mb-0">{{ header.ref_name }}</h3>
+  <div class="text-muted">Start from the latest approved data, edit rows, then submit.</div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Tracking ID</label>
+          {{ form.tracking_id }}
+          <div class="form-text">Hidden most of the time. Kept for audit and loader matching.</div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Override retired</label>
+          {{ form.override_retired_flag }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Reason</label>
+          {{ form.change_reason }}
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Ticket</label>
+          {{ form.change_ticket_ref }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Category</label>
+          {{ form.change_category }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Risk impact</label>
+          {{ form.risk_impact }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Source channel</label>
+          {{ form.request_source_channel }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Source system</label>
+          {{ form.request_source_system }}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Proposed data (JSON)</label>
+          {{ form.payload_json }}
+          <div class="form-text">
+            For now, edits are row-based. Column changes are planned for later.
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <a class="btn btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">Cancel</a>
+        <button class="btn btn-primary" type="submit">Save draft</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

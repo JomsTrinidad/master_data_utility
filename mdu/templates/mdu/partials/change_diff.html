@@ -1,0 +1,123 @@
+{% load mdu_extras %}
+
+<style>
+  /* ---- Table baseline ---- */
+  .diff-table {
+    table-layout: auto;
+    width: 80%;
+  }
+  .diff-table th,
+  .diff-table td {
+    vertical-align: top;
+  }
+
+  /* ---- Each business column needs space ---- */
+  .diff-col {
+    min-width: 360px;   /* critical: prevents squeeze */
+    max-width: 520px;
+  }
+
+  /* ---- Inside-cell side-by-side grid ---- */
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* TRUE side-by-side */
+    column-gap: 1px;
+  }
+ 
+.diff-box {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 6px 8px;
+  min-height: 42px;
+
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.diff-before {
+  background-color: #f5f6f7;   /* light gray */
+  color: #495057;              /* dark gray text */
+    border-left: 4px solid #adb5bd;
+}
+
+.diff-after {
+  background-color: #ffffff;   /* clean white */
+  color: #212529;              /* default text */
+  border-left: 4px solid #40f0ad; /* Bootstrap primary */
+}
+
+
+  .diff-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-bottom: 2px;
+  }
+
+  /* ---- Highlight changed cells ---- */
+  .diff-changed {
+    background-color: rgba(255, 193, 7, 0.15);
+  }
+
+  /* ---- Row key column ---- */
+  .diff-rowkey {
+    min-width: 120px;
+    white-space: nowrap;
+    color: #6c757d;
+    font-size: 0.85rem;
+  }
+
+
+
+</style>
+
+{% if not diff_rows %}
+  <div class="text-muted">No comparable rows to diff.</div>
+{% else %}
+<div class="diff-table-wrapper">
+  <table class="table table-sm table-bordered align-middle diff-table">
+    <thead>
+      <tr>
+        <th class="diff-rowkey">Row</th>
+        {% for col in biz_cols %}
+          <th class="diff-col">
+            <div class="small text-muted"><em>{{ col.tech }}</em></div>
+            <div>{{ col.biz }}</div>
+          </th>
+        {% endfor %}
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for r in diff_rows %}
+        <tr>
+          <td class="diff-rowkey">{{ r.key }}</td>
+
+          {% for c in r.cells %}
+            <td class="diff-col {% if c.changed %}diff-changed{% endif %}">
+              <div class="diff-grid">
+                <div>
+                  <div class="diff-label">Before</div>
+                  <div class="diff-box diff-before">
+                    {{ c.before|default:"" }}
+                  </div>
+                </div>
+
+                <div>
+                  <div class="diff-label">After</div>
+                  <div class="diff-box diff-after">
+                    {{ c.after|default:"" }}
+                  </div>
+                </div>
+              </div>
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

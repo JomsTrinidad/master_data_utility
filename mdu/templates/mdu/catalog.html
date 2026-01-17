@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load django_tables2 %}
+{% block title %}Catalog{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="mb-0">MDU Catalog</h3>
+    <div class="text-muted">Browse authored reference data.</div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+
+
+    <form method="get" class="mb-3">
+      <div class="row g-2">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted mb-1">Search</label>
+          {{ filter.form.q }}
+        </div>
+
+        <div class="col-12 col-md-2">
+          <label class="form-label small text-muted mb-1">Status</label>
+          {{ filter.form.status }}
+        </div>
+
+        <div class="col-12 col-md-2">
+          <label class="form-label small text-muted mb-1">Type</label>
+          {{ filter.form.ref_type }}
+        </div>
+
+        <div class="col-12 col-md-2">
+          <label class="form-label small text-muted mb-1">Mode</label>
+          {{ filter.form.mode }}
+        </div>
+
+        <div class="col-12 col-md-2">
+          <label class="form-label small text-muted mb-1 d-none d-md-block">&nbsp;</label>
+
+          <div class="d-flex gap-2 flex-nowrap" style="padding-bottom: 2px;">
+            <button class="btn btn-primary flex-fill" type="submit">Apply</button>
+            <a class="btn btn-outline-secondary flex-fill" href="{% url 'mdu:catalog' %}">Reset</a>
+          </div>
+        </div>
+
+
+      </div>
+      
+
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" name="include_all" value="1" id="includeAll"
+              {% if request.GET.include_all %}checked{% endif %}>
+        <label class="form-check-label" for="includeAll">
+          Show non-active
+        </label>
+      </div>
+      
+    </form>
+
+
+
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    {% render_table table %}
+  </div>
+</div>
+{% endblock %}
