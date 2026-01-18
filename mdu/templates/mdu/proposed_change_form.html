@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% load mdu_extras %}
 {% block title %}Propose change{% endblock %}
 {% block content %}
-{% load mdu_extras %}
+
 <div class="mb-3">
   <div class="text-muted small">Reference</div>
   <h3 class="mb-0">{{ header.ref_name }}</h3>
@@ -12,16 +13,23 @@
   <div class="card-body">
     <form method="post">
       {% csrf_token %}
+
+      {# Baseline payload used by server to preserve dirty highlights across re-render (Insert New Row) #}
+      <input type="hidden" name="baseline_payload_json" value="{{ baseline_payload_json|default:''|escape }}">
+
       <div class="row g-3">
+
         <div class="col-md-4">
           <label class="form-label">Tracking ID</label>
           {{ form.tracking_id }}
           <div class="form-text">Hidden most of the time. Kept for audit and loader matching.</div>
         </div>
+
         <div class="col-md-2">
           <label class="form-label">Override retired</label>
           {{ form.override_retired_flag }}
         </div>
+
         <div class="col-md-6">
           <label class="form-label">Reason</label>
           {{ form.change_reason }}
@@ -31,18 +39,22 @@
           <label class="form-label">Ticket</label>
           {{ form.change_ticket_ref }}
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Category</label>
           {{ form.change_category }}
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Risk impact</label>
           {{ form.risk_impact }}
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Source channel</label>
           {{ form.request_source_channel }}
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Source system</label>
           {{ form.request_source_system }}
@@ -56,14 +68,16 @@
               <div class="text-muted small">Meta fields are steward-controlled. Makers can only update business cells.</div>
             </div>
 
-            {% if is_maker %}
-              <button class="btn btn-sm btn-outline-primary" type="submit" name="action" value="add_row">
-                Insert new row
-              </button>
-            {% endif %}
+            <div class="d-flex gap-2 align-items-center">
+              {% if is_maker %}
+                <button class="btn btn-sm btn-outline-primary" type="submit" name="action" value="add_row">
+                  Insert new row
+                </button>
+              {% endif %}
 
-            <div class="d-flex gap-2">
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">Back to reference</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">
+                Back to reference
+              </a>
             </div>
           </div>
 
@@ -81,13 +95,11 @@
                       <div class="small text-body-secondary">[<em>{{ c }}</em>]</div>
                     </th>
                   {% endfor %}
-
                 </tr>
               </thead>
 
               <tbody class="small">
                 {% for r in rows %}
-                  {# Header row is view-only for makers (labels live here). Values rows editable in business cols only. #}
                   <tr class="{% if r.row_type|lower == 'header' %}bg-body-tertiary{% endif %}">
                     <td class="text-nowrap">{{ r.row_type|default:"" }}</td>
 
@@ -100,19 +112,25 @@
                     </td>
 
                     {% for c in visible_cols %}
-                      {% if is_maker and r.row_type|lower == "values" %}
-                        <td>
-                          <input
-                            class="form-control form-control-sm"
-                            name="cell__{{ forloop.parentloop.counter0 }}__{{ c }}"
-                            value="{{ r|get_item:c|default:'' }}"
-                          >
-                        </td>
-                      {% else %}
-                        <td>
-                          <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
-                        </td>
-                      {% endif %}
+                      {# Server-side dirty key uses the SAME row index used in input names (counter0) #}
+                      {% with row_index=forloop.parentloop.counter0 %}
+                        {% with cell_key=row_index|stringformat:"s"|add:":"|add:c %}
+                          {% if is_maker and r.row_type|lower == "values" %}
+                            <td class="{% if dirty_cells and dirty_cells|get_item:cell_key %}cell-dirty{% endif %}">
+                              <input
+                                class="form-control form-control-sm"
+                                name="cell__{{ row_index }}__{{ c }}"
+                                value="{{ r|get_item:c|default:'' }}"
+                                data-orig="{{ r|get_item:c|default:''|escape }}"
+                              >
+                            </td>
+                          {% else %}
+                            <td>
+                              <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
+                            </td>
+                          {% endif %}
+                        {% endwith %}
+                      {% endwith %}
                     {% endfor %}
 
                   </tr>
@@ -126,15 +144,12 @@
           </div>
         </div>
 
-
         {# Keep payload_json in the form submission but hide it from business users #}
         <div class="d-none">
           {{ form.payload_json }}
         </div>
 
       </div>
-
-
 
       <div class="d-flex justify-content-end gap-2 mt-3">
         <a class="btn btn-outline-secondary" href="{% url 'mdu:header_detail' pk=header.pk %}">Cancel</a>
@@ -144,45 +159,36 @@
   </div>
 </div>
 
-
 <script>
 (function () {
-  // We will mark dirty for ANY input inside the proposed-change grid
-  // that has a name like: cell__<row_index>__string_XX
   function isBusinessCellInput(el) {
-    if (!el || !el.name) return false;
-    return el.name.startsWith("cell__");
+    return !!(el && el.name && el.name.startsWith("cell__"));
   }
 
   function markDirty(el) {
     const td = el.closest("td");
     if (!td) return;
 
-    // Set original value once (from initial render)
-    if (!el.dataset.orig) el.dataset.orig = el.defaultValue ?? "";
+    // Prefer server-provided baseline (stable across re-render)
+    const orig = (el.dataset.orig !== undefined)
+      ? el.dataset.orig
+      : (el.getAttribute("data-orig") ?? (el.defaultValue ?? ""));
 
-    const orig = el.dataset.orig;
-    const now  = el.value ?? "";
+    el.dataset.orig = orig;
+
+    const now = el.value ?? "";
 
     if (now !== orig) td.classList.add("cell-dirty");
     else td.classList.remove("cell-dirty");
   }
 
-  // Event delegation (works for future HTMX too)
   document.addEventListener("input", function (e) {
     const el = e.target;
     if (!isBusinessCellInput(el)) return;
     if (el.disabled || el.readOnly) return;
     markDirty(el);
   });
-
-  // On page load, initialize dirty markers
-  window.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll('input[name^="cell__"], textarea[name^="cell__"]').forEach(markDirty);
-  });
 })();
 </script>
-
-
 
 {% endblock %}

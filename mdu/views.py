@@ -217,6 +217,39 @@ def _suggest_tracking_id():
     return f"SES{stamp}-REQ{n:06d}"
 
 
+def compute_dirty_cells(baseline_payload_json: str, current_payload_json: str):
+    """
+    Returns a dict like {"3:string_01": True, "5:string_02": True}
+    where the key format matches the row_index used in the template naming:
+      name="cell__<row_index>__string_XX"
+
+    We compare row-by-row by index (including the header row index),
+    and only mark VALUES rows and only business fields string_01..string_65.
+    """
+    dirty = {}
+
+    base_rows = _safe_rows(baseline_payload_json)
+    cur_rows = _safe_rows(current_payload_json)
+
+    string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+    n = min(len(base_rows), len(cur_rows))
+
+    for idx in range(n):
+        b = base_rows[idx] if isinstance(base_rows[idx], dict) else {}
+        c = cur_rows[idx] if isinstance(cur_rows[idx], dict) else {}
+
+        # Only track dirty business cells on VALUES rows
+        if (c.get("row_type") or "").lower() != "values":
+            continue
+
+        for col in string_cols:
+            bv = (b.get(col) or "")
+            cv = (c.get(col) or "")
+            if str(bv).strip() != str(cv).strip():
+                dirty[f"{idx}:{col}"] = True
+
+    return dirty
+
 @group_required("maker")
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
@@ -235,89 +268,13 @@ def propose_change(request, header_pk):
             "This reference is retired. You can still propose a change, but it must be flagged as an override."
         )
 
-    # ----------------------------
-    # POST: Insert row / Save draft
-    # ----------------------------
-    if request.method == "POST":
-        post = request.POST.copy()
-
-        # Apply table cell edits into payload_json
-        post["payload_json"] = _apply_cell_edits_to_payload_json(
-            post.get("payload_json", ""),
-            post
-        )
-
-        action = post.get("action")
-
-        # Insert new row (no DB save)
-        if action == "add_row":
-            try:
-                obj = json.loads(post.get("payload_json", "") or "{}")
-            except Exception:
-                obj = {}
-
-            rows_list = obj.get("rows", [])
-            if not isinstance(rows_list, list):
-                rows_list = []
-
-            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
-            for i in range(1, 66):
-                new_row[f"string_{i:02d}"] = ""
-
-            rows_list.append(new_row)
-            obj["rows"] = rows_list
-            post["payload_json"] = json.dumps(obj, indent=2)
-
-            form = ProposedChangeForm(post)
-
-            # Recompute table layout for render
-            payload = post["payload_json"]
-            rows = payload_rows(payload)
-
-            header_row = next(
-                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
-                {}
-            ) or {}
-
-            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
-            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
-            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
-
-            return render(request, "mdu/proposed_change_form.html", {
-                "header": header,
-                "form": form,
-                "rows": rows,
-                "visible_cols": visible_cols,
-                "col_labels": col_labels,
-                "breadcrumbs": [
-                    _crumb("Catalog", reverse("mdu:catalog")),
-                    _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
-                    _crumb("Propose Change", None),
-                ],
-                **_role_flags(request.user)
-            })
-
-        # Save draft (DB write)
-        form = ProposedChangeForm(post)
-        if form.is_valid():
-            ch = form.save(commit=False)
-            ch.header = header
-            ch.display_id = _next_display_id()
-            ch.created_by = request.user
-            if not ch.tracking_id:
-                ch.tracking_id = _suggest_tracking_id()
-            ch.save()
-            messages.success(request, "Draft saved. Review the table, then submit when ready.")
-            return redirect("mdu:proposed_change_detail", pk=ch.pk)
-
-        # If invalid, fall through to re-render with errors
-        payload = post.get("payload_json", "")
-        rows = payload_rows(payload)
+    dirty_cells = {}
+    baseline_payload_json = ""
 
     # ----------------------------
-    # GET: initialize from latest approved
+    # GET: initialize baseline + form
     # ----------------------------
-    else:
+    if request.method != "POST":
         if header.last_approved_change and header.last_approved_change.payload_json:
             initial_payload = header.last_approved_change.payload_json
         else:
@@ -336,17 +293,81 @@ def propose_change(request, header_pk):
                 ]
             }, indent=2)
 
+        baseline_payload_json = initial_payload
+
         form = ProposedChangeForm(initial={
             "tracking_id": _suggest_tracking_id(),
             "override_retired_flag": "N",
-            "payload_json": initial_payload
+            "payload_json": initial_payload,
         })
 
         payload = initial_payload
         rows = payload_rows(payload)
 
     # ----------------------------
-    # Shared render (GET or invalid POST)
+    # POST: Insert row / Save draft
+    # ----------------------------
+    else:
+        post = request.POST.copy()
+
+        # baseline comes from hidden input
+        baseline_payload_json = post.get("baseline_payload_json", "") or post.get("payload_json", "")
+
+        # Apply any edits from grid inputs into payload_json
+        post["payload_json"] = _apply_cell_edits_to_payload_json(
+            post.get("payload_json", ""),
+            post
+        )
+
+        action = post.get("action")
+
+        # Insert new row (no save yet) -> re-render
+        if action == "add_row":
+            try:
+                obj = json.loads(post.get("payload_json", "") or "{}")
+            except Exception:
+                obj = {}
+
+            rows_list = obj.get("rows", [])
+            if not isinstance(rows_list, list):
+                rows_list = []
+
+            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+            for i in range(1, 66):
+                new_row[f"string_{i:02d}"] = ""
+
+            rows_list.append(new_row)
+            obj["rows"] = rows_list
+            post["payload_json"] = json.dumps(obj, indent=2)
+
+            # compute dirty based on baseline vs current
+            dirty_cells = compute_dirty_cells(baseline_payload_json, post["payload_json"])
+
+            form = ProposedChangeForm(post)
+            payload = post["payload_json"]
+            rows = payload_rows(payload)
+
+        else:
+            # Normal save draft path
+            form = ProposedChangeForm(post)
+            if form.is_valid():
+                ch = form.save(commit=False)
+                ch.header = header
+                ch.display_id = _next_display_id()
+                ch.created_by = request.user
+                if not ch.tracking_id:
+                    ch.tracking_id = _suggest_tracking_id()
+                ch.save()
+                messages.success(request, "Draft saved. Review the table, then submit when ready.")
+                return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+            # invalid form -> re-render with errors + preserve dirty
+            payload = post.get("payload_json", "")
+            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+            rows = payload_rows(payload)
+
+    # ----------------------------
+    # Shared column layout (match header_detail)
     # ----------------------------
     header_row = next(
         (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
@@ -363,12 +384,14 @@ def propose_change(request, header_pk):
         "rows": rows,
         "visible_cols": visible_cols,
         "col_labels": col_labels,
+        "dirty_cells": dirty_cells,
+        "baseline_payload_json": baseline_payload_json,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
             _crumb("Propose Change", None),
         ],
-        **_role_flags(request.user)
+        **_role_flags(request.user),
     })
 
 
@@ -394,7 +417,6 @@ def proposed_change_detail(request, pk):
         "can_decide": can_decide,
         **_role_flags(request.user)
     })
-
 @group_required("maker")
 def proposed_change_edit(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
@@ -404,9 +426,19 @@ def proposed_change_edit(request, pk):
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     header = ch.header
+    dirty_cells = {}
+    baseline_payload_json = ""
 
-    if request.method == "POST":
+    if request.method != "POST":
+        baseline_payload_json = ch.payload_json or ""
+        form = ProposedChangeForm(instance=ch)
+        payload = baseline_payload_json
+        rows = payload_rows(payload)
+
+    else:
         post = request.POST.copy()
+
+        baseline_payload_json = post.get("baseline_payload_json", "") or (ch.payload_json or "")
 
         post["payload_json"] = _apply_cell_edits_to_payload_json(
             post.get("payload_json", ""),
@@ -433,49 +465,22 @@ def proposed_change_edit(request, pk):
             obj["rows"] = rows_list
             post["payload_json"] = json.dumps(obj, indent=2)
 
-            form = ProposedChangeForm(post, instance=ch)
+            dirty_cells = compute_dirty_cells(baseline_payload_json, post["payload_json"])
 
+            form = ProposedChangeForm(post, instance=ch)
             payload = post["payload_json"]
             rows = payload_rows(payload)
 
-            header_row = next(
-                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
-                {}
-            ) or {}
+        else:
+            form = ProposedChangeForm(post, instance=ch)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Draft updated.")
+                return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
-            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
-            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
-            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
-
-            return render(request, "mdu/proposed_change_form.html", {
-                "header": header,
-                "form": form,
-                "rows": rows,
-                "visible_cols": visible_cols,
-                "col_labels": col_labels,
-                "editing": True,
-                "breadcrumbs": [
-                    _crumb("Catalog", reverse("mdu:catalog")),
-                    _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
-                    _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
-                    _crumb("Edit", None),
-                ],
-                **_role_flags(request.user)
-            })
-
-        form = ProposedChangeForm(post, instance=ch)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Draft updated.")
-            return redirect("mdu:proposed_change_detail", pk=ch.pk)
-
-        payload = post.get("payload_json", "")
-        rows = payload_rows(payload)
-
-    else:
-        form = ProposedChangeForm(instance=ch)
-        payload = ch.payload_json or ""
-        rows = payload_rows(payload)
+            payload = post.get("payload_json", "")
+            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+            rows = payload_rows(payload)
 
     header_row = next(
         (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
@@ -492,6 +497,8 @@ def proposed_change_edit(request, pk):
         "rows": rows,
         "visible_cols": visible_cols,
         "col_labels": col_labels,
+        "dirty_cells": dirty_cells,
+        "baseline_payload_json": baseline_payload_json,
         "editing": True,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
@@ -499,7 +506,7 @@ def proposed_change_edit(request, pk):
             _crumb(ch.display_id, reverse("mdu:proposed_change_detail", kwargs={"pk": ch.pk})),
             _crumb("Edit", None),
         ],
-        **_role_flags(request.user)
+        **_role_flags(request.user),
     })
 
 
