@@ -8,6 +8,14 @@
     <h3 class="mb-0">MDU Catalog</h3>
     <div class="text-muted">Browse authored reference data.</div>
   </div>
+
+  {% if is_steward or is_approver %}
+    <div>
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'mdu:header_create' %}">
+        + New reference
+      </a>
+    </div>
+  {% endif %}
 </div>
 
 <div class="card shadow-sm mb-3">

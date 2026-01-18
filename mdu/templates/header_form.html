@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == "edit" %}Edit reference{% else %}New reference{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+  <div class="text-muted small">Reference</div>
+  <h3 class="mb-0">
+    {% if mode == "edit" %}
+      Edit: {{ header.ref_name }}
+    {% else %}
+      Create a new reference
+    {% endif %}
+  </h3>
+  <div class="text-muted">Stewards manage reference setup and ownership.</div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Reference name</label>
+          {{ form.ref_name }}
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Reference type</label>
+          {{ form.ref_type }}
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Mode</label>
+          {{ form.mode }}
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          {{ form.status }}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Owner group</label>
+          {{ form.owner_group }}
+        </div>
+
+        <div class="col-md-5">
+          <label class="form-label">Tags</label>
+          {{ form.tags }}
+          <div class="form-text small">Comma-separated. Used for quick searching and grouping.</div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="{% url 'mdu:catalog' %}">Cancel</a>
+        <button class="btn btn-primary" type="submit">
+          {% if mode == "edit" %}Save changes{% else %}Create reference{% endif %}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}

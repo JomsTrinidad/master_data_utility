@@ -12,7 +12,7 @@ from datetime import date
 from .models import MDUHeader, ChangeRequest, MDUCert
 from .filters import HeaderFilter, ProposedChangeFilter
 from .tables import HeaderTable, ProposedChangeTable, CertTable
-from .forms import ProposedChangeForm, CertForm
+from .forms import ProposedChangeForm, CertForm, HeaderForm
 from .permissions import group_required, in_group
 from .services import payload_rows, derive_business_columns, generate_loader_artifacts
 from django.db.models import Exists, OuterRef
@@ -60,6 +60,56 @@ def catalog(request):
          "breadcrumbs": [{"label": "Catalog", "url": None},],
          **_role_flags(request.user)},
     )
+
+
+@group_required("steward", "approver")
+def header_create(request):
+    if request.method == "POST":
+        form = HeaderForm(request.POST)
+        if form.is_valid():
+            header = form.save()
+            messages.success(request, "Reference created.")
+            return redirect("mdu:header_detail", pk=header.pk)
+    else:
+        form = HeaderForm()
+
+    return render(request, "mdu/header_form.html", {
+        "form": form,
+        "mode": "create",
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb("New reference", None),
+        ],
+        **_role_flags(request.user),
+    })
+
+
+@group_required("steward", "approver")
+def header_edit(request, pk):
+    header = get_object_or_404(MDUHeader, pk=pk)
+
+    if request.method == "POST":
+        form = HeaderForm(request.POST, instance=header)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Reference updated.")
+            return redirect("mdu:header_detail", pk=header.pk)
+    else:
+        form = HeaderForm(instance=header)
+
+    return render(request, "mdu/header_form.html", {
+        "form": form,
+        "header": header,
+        "mode": "edit",
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+            _crumb("Edit reference", None),
+        ],
+        **_role_flags(request.user),
+    })
+
+
 
 @login_required
 def header_detail(request, pk):
@@ -250,6 +300,26 @@ def compute_dirty_cells(baseline_payload_json: str, current_payload_json: str):
 
     return dirty
 
+def _lock_meta_fields_for_maker(post, *, user, existing: ChangeRequest | None = None):
+    """Enforce 'makers can't edit governance metadata' without breaking POST.
+
+    - requested_by_sid: always auto-filled from the logged-in user for makers
+    - other governance fields: pinned to existing values (edit) or blank (create)
+    """
+    if not in_group(user, "maker"):
+        return
+    if in_group(user, "steward") or in_group(user, "approver"):
+        return
+
+    # Always pin requested_by_sid to the logged-in maker
+    post["requested_by_sid"] = (getattr(user, "username", "") or "").strip()
+
+    lock_to_existing = ["version", "primary_approver_sid", "secondary_approver_sid"]
+    for f in lock_to_existing:
+        post[f] = getattr(existing, f, "") if existing else ""
+
+
+
 @group_required("maker")
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
@@ -305,12 +375,12 @@ def propose_change(request, header_pk):
         rows = payload_rows(payload)
 
     # ----------------------------
-    # POST: Insert row / Save draft
+    # POST: bulk upload / insert row / save draft
     # ----------------------------
     else:
         post = request.POST.copy()
 
-        # baseline comes from hidden input
+        # baseline comes from hidden input; fallback to current payload_json
         baseline_payload_json = post.get("baseline_payload_json", "") or post.get("payload_json", "")
 
         # Apply any edits from grid inputs into payload_json
@@ -319,10 +389,42 @@ def propose_change(request, header_pk):
             post
         )
 
-        action = post.get("action")
+        _lock_meta_fields_for_maker(post, user=request.user)
+
+        action = post.get("action")  # only exists on POST
+
+        # ----- Bulk upload (NO draft creation) -----
+        if action == "bulk_upload":
+            temp_rows = payload_rows(post.get("payload_json", ""))
+            visible_cols_now = _visible_cols_from_rows(temp_rows)
+
+            if not visible_cols_now:
+                messages.error(request, "Cannot upload: header row does not define any business fields.")
+                payload = post.get("payload_json", "")
+                rows = temp_rows
+                form = ProposedChangeForm(post)
+                dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+
+            else:
+                new_payload, added, err = _append_csv_rows_as_inserts(
+                    post.get("payload_json", ""),
+                    request.FILES.get("bulk_csv"),
+                    visible_cols_now
+                )
+
+                if err:
+                    messages.error(request, err)
+                else:
+                    messages.success(request, f"Added {added} rows from CSV.")
+
+                post["payload_json"] = new_payload
+                payload = new_payload
+                rows = payload_rows(payload)
+                form = ProposedChangeForm(post)
+                dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
         # Insert new row (no save yet) -> re-render
-        if action == "add_row":
+        elif action == "add_row":
             try:
                 obj = json.loads(post.get("payload_json", "") or "{}")
             except Exception:
@@ -340,15 +442,13 @@ def propose_change(request, header_pk):
             obj["rows"] = rows_list
             post["payload_json"] = json.dumps(obj, indent=2)
 
-            # compute dirty based on baseline vs current
-            dirty_cells = compute_dirty_cells(baseline_payload_json, post["payload_json"])
-
-            form = ProposedChangeForm(post)
             payload = post["payload_json"]
             rows = payload_rows(payload)
+            form = ProposedChangeForm(post)
+            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
+        # Normal save draft path
         else:
-            # Normal save draft path
             form = ProposedChangeForm(post)
             if form.is_valid():
                 ch = form.save(commit=False)
@@ -363,8 +463,8 @@ def propose_change(request, header_pk):
 
             # invalid form -> re-render with errors + preserve dirty
             payload = post.get("payload_json", "")
-            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
             rows = payload_rows(payload)
+            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
     # ----------------------------
     # Shared column layout (match header_detail)
@@ -394,6 +494,26 @@ def propose_change(request, header_pk):
         **_role_flags(request.user),
     })
 
+
+@require_POST
+@group_required("maker", "steward", "approver")
+def proposed_change_discard(request, pk):
+    ch = get_object_or_404(ChangeRequest, pk=pk)
+
+    if ch.status != ChangeRequest.Status.DRAFT:
+        messages.error(request, "Only Draft Changes Can Be Discarded.")
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+    # Makers can discard only their own drafts. Stewards/Approvers can discard any draft.
+    if in_group(request.user, "maker") and not (in_group(request.user, "steward") or in_group(request.user, "approver")):
+        if ch.created_by_id and ch.created_by_id != request.user.id:
+            messages.error(request, "You Can Only Discard Drafts You Created.")
+            return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+    header_pk = ch.header_id
+    ch.delete()
+    messages.success(request, "Draft Discarded.")
+    return redirect("mdu:header_detail", pk=header_pk)
 
 
 @group_required("maker", "steward", "approver")
@@ -444,6 +564,9 @@ def proposed_change_edit(request, pk):
             post.get("payload_json", ""),
             post
         )
+
+        _lock_meta_fields_for_maker(post, user=request.user, existing=ch)
+
 
         action = post.get("action")
 
@@ -500,6 +623,7 @@ def proposed_change_edit(request, pk):
         "dirty_cells": dirty_cells,
         "baseline_payload_json": baseline_payload_json,
         "editing": True,
+        "ch": ch,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -669,3 +793,65 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
 
     obj["rows"] = rows
     return json.dumps(obj, indent=2)
+
+import csv, io  # add at top of file too
+
+def _visible_cols_from_rows(rows):
+    header_row = next((r for r in rows if (r.get("row_type") or "").lower() == "header"), {}) or {}
+    string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+    return [c for c in string_cols if (header_row.get(c) or "").strip()]
+
+def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
+    """
+    Reads CSV and appends VALUES rows as INSERT into payload_json.
+    Blocks if CSV includes business columns outside visible_cols.
+    Returns (new_payload_json, added_count, error_msg)
+    """
+    if not uploaded_file:
+        return payload_json, 0, "Please choose a CSV file to upload."
+
+    try:
+        text = uploaded_file.read().decode("utf-8-sig")
+    except Exception:
+        return payload_json, 0, "Could not read CSV file. Please upload a UTF-8 CSV."
+
+    reader = csv.DictReader(io.StringIO(text))
+    csv_cols = reader.fieldnames or []
+
+    # Strict block: CSV has columns not visible in table
+    extra = [c for c in csv_cols if c and c.startswith("string_") and c not in visible_cols]
+    if extra:
+        return payload_json, 0, (
+            "Upload blocked. Your file contains columns not supported by this reference: "
+            + ", ".join(extra)
+            + ". Download the template again and do not add extra columns."
+        )
+
+    # Parse payload
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        obj = {}
+
+    rows_list = obj.get("rows", [])
+    if not isinstance(rows_list, list):
+        rows_list = []
+
+    added = 0
+    for row in reader:
+        new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+        for c in visible_cols:
+            v = row.get(c, "")
+            if v is None:
+                v = ""
+            new_row[c] = str(v).strip()
+
+        # skip empty rows
+        if all((new_row.get(c) or "") == "" for c in visible_cols):
+            continue
+
+        rows_list.append(new_row)
+        added += 1
+
+    obj["rows"] = rows_list
+    return json.dumps(obj, indent=2), added, None

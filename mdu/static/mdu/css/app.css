@@ -137,3 +137,60 @@ td.cell-dirty textarea {
   background-color: rgba(13,110,253,.08) !important;
   color: rgba(33,37,41,.92) !important;
 }
+
+
+/* =========================
+   Propose Change grid: 2D scroll
+   ========================= */
+.mdu-grid-wrap{
+  max-height: 65vh;        /* vertical scroll */
+  overflow: auto;          /* both axes */
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: .5rem;
+}
+
+/* Make table behave nicely inside 2D scroll container */
+.mdu-grid-wrap table{
+  min-width: 980px;        /* forces horizontal scroll when narrow */
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Sticky header stays sticky within the scroll container */
+.mdu-grid-wrap thead th{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+}
+
+/* Optional: keep first 3 meta columns visible while scrolling horizontally */
+.mdu-grid-wrap thead th:nth-child(-n+3),
+.mdu-grid-wrap tbody td:nth-child(-n+3){
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: #fff;
+}
+
+/* Adjust left offsets for sticky meta columns */
+.mdu-grid-wrap thead th:nth-child(1),
+.mdu-grid-wrap tbody td:nth-child(1){ left: 0; }
+
+.mdu-grid-wrap thead th:nth-child(2),
+.mdu-grid-wrap tbody td:nth-child(2){ left: 140px; }
+
+.mdu-grid-wrap thead th:nth-child(3),
+.mdu-grid-wrap tbody td:nth-child(3){ left: 280px; }
+
+/* Ensure meta column widths are stable */
+.mdu-edit-table th:nth-child(1), .mdu-edit-table td:nth-child(1){ min-width: 140px; }
+.mdu-edit-table th:nth-child(2), .mdu-edit-table td:nth-child(2){ min-width: 140px; }
+.mdu-edit-table th:nth-child(3), .mdu-edit-table td:nth-child(3){ min-width: 220px; }
+
+/* Visual separator between meta and business fields */
+.mdu-edit-table th:nth-child(3),
+.mdu-edit-table td:nth-child(3){
+  border-right: 3px solid rgba(0,0,0,.10) !important;
+}

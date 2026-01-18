@@ -38,6 +38,15 @@ class ChangeRequest(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 
+    class ChangeCategory(models.TextChoices):
+        NONE = "", "— Select —"
+        DATA_CORRECTION = "DATA_CORRECTION", "Data Correction"
+        NEW_VALUE_ADD = "NEW_VALUE_ADD", "New Value Add"
+        POLICY_COMPLIANCE = "POLICY_COMPLIANCE", "Policy / Compliance"
+        OPERATIONAL_UPDATE = "OPERATIONAL_UPDATE", "Operational Update"
+        ENHANCEMENT = "ENHANCEMENT", "Enhancement"
+        OTHER = "OTHER", "Other"
+
     header = models.ForeignKey(MDUHeader, on_delete=models.CASCADE, related_name="changes")
     display_id = models.CharField(max_length=30, unique=True)
     tracking_id = models.CharField(max_length=80, blank=True, default="")
@@ -52,7 +61,7 @@ class ChangeRequest(models.Model):
     secondary_approver_sid = models.CharField(max_length=40, blank=True, default="")
     change_reason = models.CharField(max_length=400, blank=True, default="")
     change_ticket_ref = models.CharField(max_length=120, blank=True, default="")
-    change_category = models.CharField(max_length=60, blank=True, default="")
+    change_category = models.CharField(max_length=60, choices=ChangeCategory.choices, blank=True, default=ChangeCategory.NONE)
     risk_impact = models.CharField(max_length=60, blank=True, default="")
     request_source_channel = models.CharField(max_length=60, blank=True, default="")
     request_source_system = models.CharField(max_length=60, blank=True, default="")
@@ -65,6 +74,8 @@ class ChangeRequest(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_changes")
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    bulk_add_count = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
         return self.display_id

@@ -19,7 +19,14 @@
       </div>
     </div>
 
+
     <div class="d-flex gap-2">
+      {% if is_steward or is_approver %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'mdu:header_edit' header.pk %}">
+          Edit reference
+        </a>
+      {% endif %}
+
       {% if is_maker and header.status != "RETIRED" %}
         <a class="btn btn-primary btn-sm" href="{% url 'mdu:propose_change' header_pk=header.pk %}">
           Propose change
@@ -28,6 +35,7 @@
         <button class="btn btn-secondary btn-sm" disabled>Retired (read-only)</button>
       {% endif %}
     </div>
+
     
   </div>
 
@@ -355,14 +363,21 @@
                 Click an ID to view audit details.
               </div>
 
-              <a class="btn btn-sm btn-outline-secondary"
-                href="#"
-                hx-get="{% url 'mdu:compare_modal' header.pk %}"
-                hx-target="#compare-modal-content"
-                data-bs-toggle="modal"
-                data-bs-target="#compareModal">
-                Compare versions
-              </a>
+              <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-secondary"
+                  href="#"
+                  hx-get="{% url 'mdu:compare_modal' header.pk %}"
+                  hx-target="#compare-modal-content"
+                  data-bs-toggle="modal"
+                  data-bs-target="#compareModal">
+                  Compare versions
+                </a>
+
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'mdu:compare_versions' header.pk %}">
+                  Open compare page
+                </a>
+              </div>
+
             </div>
 
 
