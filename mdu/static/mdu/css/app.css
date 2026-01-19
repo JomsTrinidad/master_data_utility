@@ -16,6 +16,7 @@
 
 .modal-wide { max-width: 95vw !important; }
 
+/* Simple sticky header helper (used by some tables) */
 .table-sticky th {
   position: sticky;
   top: 0;
@@ -60,13 +61,13 @@
 .catalog-action-buttons .btn { white-space: nowrap; }
 
 /* =========================
-   Table styling
+   Table styling (global)
    ========================= */
 
 /* Tone down header visuals */
 table thead th {
   background-color: rgba(0,0,0,.025);
-  color: rgba(33,37,41,.50);       /* softer; try .55 if you want lighter */
+  color: rgba(33,37,41,.50);
   font-weight: 600;
   border-bottom-color: rgba(0,0,0,.08);
 
@@ -91,10 +92,64 @@ table tbody td {
 }
 
 /* =========================
+   Sticky table container (Header Detail + any table using .sticky-table)
+   This is the working implementation you found in the header_detail <style>.
+   ========================= */
+.sticky-table {
+  --header-height: 54px;
+  max-height: 70vh;
+  overflow: auto;
+  background: #fff;
+}
+
+/* Kill collapsed-border artifacts */
+.sticky-table table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 1px solid #dee2e6;
+}
+
+/* Shared sticky cell base */
+.sticky-table thead th,
+.sticky-table tbody tr.sticky-first-row td {
+  position: sticky;
+  background-clip: padding-box;
+  border: 1px solid #dee2e6;
+}
+
+/* Header (always sticky) */
+.sticky-table thead th {
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+}
+
+/* Optional: first body row sticky (used by header_detail when it applies sticky-first-row to body) */
+.sticky-table tbody tr.sticky-first-row td {
+  top: var(--header-height);
+  z-index: 4;
+  background: #fff;
+}
+
+/* Vertical borders for non-sticky body cells */
+.sticky-table tbody td {
+  border-left: 1px solid #dee2e6;
+  border-right: 1px solid #dee2e6;
+}
+
+/* Backward compatible: if some page uses "first row sticky" without class */
+.sticky-table tbody tr:first-child td {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 4;
+  background: #fff;
+  background-clip: padding-box;
+  border: 1px solid #dee2e6;
+}
+
+/* =========================
    Proposed change table editor (calm defaults)
    ========================= */
-
-/* Make the grid feel “spreadsheet calm” */
 .mdu-edit-table td, .mdu-edit-table th { vertical-align: middle; }
 
 /* Baseline: original values are subtle */
@@ -111,13 +166,12 @@ table tbody td {
   box-shadow: 0 0 0 .15rem rgba(13,110,253,.12);
 }
 
-/* Dirty cell = user edited it */
+/* Dirty cell = user edited it (legacy pattern) */
 .mdu-edit-table td.cell-dirty .cell-input {
   color: rgba(33, 37, 41, 0.92);
   background-color: rgba(13,110,253,.06);
 }
 
-/* Optional: stronger dirty indicator on focus */
 .mdu-edit-table td.cell-dirty .cell-input:focus {
   background-color: rgba(13,110,253,.10);
 }
@@ -131,33 +185,33 @@ table tbody td {
   color: rgba(33,37,41,.50) !important;
 }
 
-/* Dirty cell highlight */
-td.cell-dirty input,
-td.cell-dirty textarea {
-  background-color: rgba(13,110,253,.08) !important;
-  color: rgba(33,37,41,.92) !important;
+/* Dirty cell highlight (new baseline-driven approach) */
+.mdu-dirty {
+  outline: 2px solid rgba(255, 193, 7, 0.8);
+  background: rgba(255, 193, 7, 0.12);
 }
 
-
 /* =========================
-   Propose Change grid: 2D scroll
+   Propose Change grid: 2D scroll + sticky header (NO frozen columns)
+   Keep this minimal so it doesn’t conflict with .sticky-table.
+   Use this for the editor table if you prefer mdu-grid-wrap.
    ========================= */
 .mdu-grid-wrap{
-  max-height: 65vh;        /* vertical scroll */
-  overflow: auto;          /* both axes */
+  max-height: 65vh;
+  overflow: auto;
   background: #fff;
   border: 1px solid rgba(0,0,0,.08);
   border-radius: .5rem;
 }
 
-/* Make table behave nicely inside 2D scroll container */
+/* Table behavior inside editor scroll container */
 .mdu-grid-wrap table{
-  min-width: 980px;        /* forces horizontal scroll when narrow */
+  min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
 }
 
-/* Sticky header stays sticky within the scroll container */
+/* Sticky header within the editor scroll container */
 .mdu-grid-wrap thead th{
   position: sticky;
   top: 0;
@@ -165,32 +219,13 @@ td.cell-dirty textarea {
   background: #f8f9fa;
 }
 
-/* Optional: keep first 3 meta columns visible while scrolling horizontally */
-.mdu-grid-wrap thead th:nth-child(-n+3),
-.mdu-grid-wrap tbody td:nth-child(-n+3){
-  position: sticky;
-  left: 0;
-  z-index: 6;
-  background: #fff;
-}
-
-/* Adjust left offsets for sticky meta columns */
-.mdu-grid-wrap thead th:nth-child(1),
-.mdu-grid-wrap tbody td:nth-child(1){ left: 0; }
-
-.mdu-grid-wrap thead th:nth-child(2),
-.mdu-grid-wrap tbody td:nth-child(2){ left: 140px; }
-
-.mdu-grid-wrap thead th:nth-child(3),
-.mdu-grid-wrap tbody td:nth-child(3){ left: 280px; }
-
-/* Ensure meta column widths are stable */
-.mdu-edit-table th:nth-child(1), .mdu-edit-table td:nth-child(1){ min-width: 140px; }
-.mdu-edit-table th:nth-child(2), .mdu-edit-table td:nth-child(2){ min-width: 140px; }
-.mdu-edit-table th:nth-child(3), .mdu-edit-table td:nth-child(3){ min-width: 220px; }
-
-/* Visual separator between meta and business fields */
-.mdu-edit-table th:nth-child(3),
-.mdu-edit-table td:nth-child(3){
-  border-right: 3px solid rgba(0,0,0,.10) !important;
+/* =========================
+   Accordion polish
+   ========================= */
+.accordion-button.collapsed {
+  background-image: linear-gradient(
+    to right,
+    rgba(13, 110, 253, 0.06),
+    rgba(13, 110, 253, 0)
+  );
 }

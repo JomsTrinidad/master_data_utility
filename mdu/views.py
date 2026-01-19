@@ -16,9 +16,15 @@ from .forms import ProposedChangeForm, CertForm, HeaderForm
 from .permissions import group_required, in_group
 from .services import payload_rows, derive_business_columns, generate_loader_artifacts
 from django.db.models import Exists, OuterRef
+from django.utils.safestring import mark_safe
 from django.urls import reverse
 from .validators import validate_change_request_payload, validate_update_rowids_against_latest_hash
 from .validators import validate_update_rowids_against_latest
+import csv
+import io
+import re
+
+
 
 
 def _crumb(label, url=None):
@@ -338,8 +344,14 @@ def propose_change(request, header_pk):
             "This reference is retired. You can still propose a change, but it must be flagged as an override."
         )
 
+    request_overview_open = True
+
     dirty_cells = {}
     baseline_payload_json = ""
+
+    # Used by template to scroll/focus and show inline "X rows added"
+    focus_row_index = None
+    rows_added_count = 0
 
     # ----------------------------
     # GET: initialize baseline + form
@@ -380,6 +392,8 @@ def propose_change(request, header_pk):
     else:
         post = request.POST.copy()
 
+        request_overview_open = (post.get("request_overview_open") == "1")
+
         # baseline comes from hidden input; fallback to current payload_json
         baseline_payload_json = post.get("baseline_payload_json", "") or post.get("payload_json", "")
 
@@ -395,6 +409,16 @@ def propose_change(request, header_pk):
 
         # ----- Bulk upload (NO draft creation) -----
         if action == "bulk_upload":
+            # capture pre-count so we can focus the first newly added row
+            try:
+                obj_before = json.loads(post.get("payload_json", "") or "{}")
+            except Exception:
+                obj_before = {}
+            rows_list_before = obj_before.get("rows", [])
+            if not isinstance(rows_list_before, list):
+                rows_list_before = []
+            pre_count = len(rows_list_before)
+
             temp_rows = payload_rows(post.get("payload_json", ""))
             visible_cols_now = _visible_cols_from_rows(temp_rows)
 
@@ -414,8 +438,16 @@ def propose_change(request, header_pk):
 
                 if err:
                     messages.error(request, err)
+                    rows_added_count = 0
+                    focus_row_index = None
                 else:
-                    messages.success(request, f"Added {added} rows from CSV.")
+                    rows_added_count = added
+                    if added > 0:
+                        focus_row_index = pre_count  # first newly added row
+                        messages.success(request, f"Added {added} rows from CSV.")
+                    else:
+                        focus_row_index = None
+                        messages.warning(request, "No rows were added (CSV had no non-empty rows).")
 
                 post["payload_json"] = new_payload
                 payload = new_payload
@@ -442,6 +474,10 @@ def propose_change(request, header_pk):
             obj["rows"] = rows_list
             post["payload_json"] = json.dumps(obj, indent=2)
 
+            # row added UX signals
+            rows_added_count = 1
+            focus_row_index = len(rows_list) - 1
+
             payload = post["payload_json"]
             rows = payload_rows(payload)
             form = ProposedChangeForm(post)
@@ -458,8 +494,23 @@ def propose_change(request, header_pk):
                 if not ch.tracking_id:
                     ch.tracking_id = _suggest_tracking_id()
                 ch.save()
-                messages.success(request, "Draft saved. Review the table, then submit when ready.")
-                return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+                drafts_url = reverse("mdu:proposed_change_list")
+
+                messages.success(
+                    request,
+                    mark_safe(
+                        'Draft saved. Review the table, then submit when ready. '
+                        f'To review your drafts, click <a href="{drafts_url}">here</a>.'
+                    )
+                )
+
+                next_action = request.POST.get("save_next", "stay")
+                if next_action == "back":
+                    return redirect("mdu:header_detail", pk=header.pk)
+
+                # Stay on edit screen and tag URL so we can auto-show a “saved” toast
+                return redirect(f"{reverse('mdu:proposed_change_edit', kwargs={'pk': ch.pk})}?saved=1")
 
             # invalid form -> re-render with errors + preserve dirty
             payload = post.get("payload_json", "")
@@ -486,6 +537,12 @@ def propose_change(request, header_pk):
         "col_labels": col_labels,
         "dirty_cells": dirty_cells,
         "baseline_payload_json": baseline_payload_json,
+        "request_overview_open": request_overview_open,
+
+        # NEW: for scroll/focus + inline notification under table
+        "focus_row_index": focus_row_index,
+        "rows_added_count": rows_added_count,
+
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -493,6 +550,7 @@ def propose_change(request, header_pk):
         ],
         **_role_flags(request.user),
     })
+
 
 
 @require_POST
@@ -549,6 +607,13 @@ def proposed_change_edit(request, pk):
     dirty_cells = {}
     baseline_payload_json = ""
 
+    request_overview_open = True
+
+
+    # NEW: used by template to scroll/focus and show inline "X rows added"
+    focus_row_index = None
+    rows_added_count = 0
+
     if request.method != "POST":
         baseline_payload_json = ch.payload_json or ""
         form = ProposedChangeForm(instance=ch)
@@ -558,6 +623,8 @@ def proposed_change_edit(request, pk):
     else:
         post = request.POST.copy()
 
+        request_overview_open = (post.get("request_overview_open") == "1")
+
         baseline_payload_json = post.get("baseline_payload_json", "") or (ch.payload_json or "")
 
         post["payload_json"] = _apply_cell_edits_to_payload_json(
@@ -566,7 +633,6 @@ def proposed_change_edit(request, pk):
         )
 
         _lock_meta_fields_for_maker(post, user=request.user, existing=ch)
-
 
         action = post.get("action")
 
@@ -588,18 +654,162 @@ def proposed_change_edit(request, pk):
             obj["rows"] = rows_list
             post["payload_json"] = json.dumps(obj, indent=2)
 
+            # NEW: row added UX signals
+            rows_added_count = 1
+            focus_row_index = len(rows_list) - 1
+
             dirty_cells = compute_dirty_cells(baseline_payload_json, post["payload_json"])
 
             form = ProposedChangeForm(post, instance=ch)
             payload = post["payload_json"]
             rows = payload_rows(payload)
 
+        elif action == "bulk_upload":
+            f = request.FILES.get("bulk_csv")
+            if not f:
+                messages.error(request, "Please choose a CSV file to upload.")
+                form = ProposedChangeForm(post, instance=ch)
+                payload = post.get("payload_json", "")
+                dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+                rows = payload_rows(payload)
+
+            else:
+                # --- build visible_cols from current header row in payload_json ---
+                payload_before = post.get("payload_json", "") or "{}"
+                rows_before = payload_rows(payload_before)
+
+                header_row = next(
+                    (r for r in (rows_before or []) if (r.get("row_type") or "").lower() == "header"),
+                    {}
+                ) or {}
+
+                string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+                visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+
+                if not visible_cols:
+                    messages.error(request, "Cannot determine business columns for this reference. (Missing header row labels.)")
+                    form = ProposedChangeForm(post, instance=ch)
+                    payload = payload_before
+                    dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+                    rows = rows_before
+
+                else:
+                    # --- read csv, allow hinted headers like: string_01 (Country Code) ---
+                    try:
+                        text = f.read().decode("utf-8-sig")
+                    except Exception:
+                        messages.error(request, "Could not read CSV file. Please upload a UTF-8 CSV.")
+                        form = ProposedChangeForm(post, instance=ch)
+                        payload = payload_before
+                        dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+                        rows = rows_before
+
+                    else:
+                        reader = csv.DictReader(io.StringIO(text))
+                        fieldnames = reader.fieldnames or []
+
+                        header_re = re.compile(r"^(string_\d{2})\b", re.IGNORECASE)
+                        display_to_tech = {}
+                        tech_cols_in_file = []
+
+                        for h in fieldnames:
+                            if not h:
+                                continue
+                            s = str(h).strip()
+                            m = header_re.match(s)
+                            if not m:
+                                continue
+                            tech = m.group(1).lower()
+                            display_to_tech[s] = tech
+                            tech_cols_in_file.append(tech)
+
+                        # Reject extra columns beyond the reference
+                        extra = [t for t in tech_cols_in_file if t.startswith("string_") and t not in visible_cols]
+                        if extra:
+                            messages.error(
+                                request,
+                                "Upload blocked. Your file contains columns not supported by this reference: "
+                                + ", ".join(extra)
+                                + ". Download the template again and do not add extra columns."
+                            )
+                            form = ProposedChangeForm(post, instance=ch)
+                            payload = payload_before
+                            dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+                            rows = rows_before
+
+                        else:
+                            try:
+                                obj = json.loads(payload_before or "{}")
+                            except Exception:
+                                obj = {}
+
+                            rows_list = obj.get("rows", [])
+                            if not isinstance(rows_list, list):
+                                rows_list = []
+
+                            pre_count = len(rows_list)
+                            added = 0
+
+                            for r in reader:
+                                new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+
+                                for c in visible_cols:
+                                    v = ""
+                                    for display_h, tech in display_to_tech.items():
+                                        if tech == c:
+                                            v = r.get(display_h, "")
+                                            break
+                                    if v is None:
+                                        v = ""
+                                    new_row[c] = str(v).strip()
+
+                                # skip totally empty rows
+                                if all((new_row.get(c) or "") == "" for c in visible_cols):
+                                    continue
+
+                                rows_list.append(new_row)
+                                added += 1
+
+                            obj["rows"] = rows_list
+                            post["payload_json"] = json.dumps(obj, indent=2)
+
+                            # NEW: row added UX signals
+                            rows_added_count = added
+                            if added > 0:
+                                focus_row_index = pre_count  # first newly added row
+                                messages.success(request, f"Added {added} rows.")
+                            else:
+                                messages.warning(request, "No rows were added (CSV had no non-empty rows).")
+
+                            dirty_cells = compute_dirty_cells(baseline_payload_json, post["payload_json"])
+                            form = ProposedChangeForm(post, instance=ch)
+                            payload = post["payload_json"]
+                            rows = payload_rows(payload)
+
         else:
             form = ProposedChangeForm(post, instance=ch)
             if form.is_valid():
                 form.save()
-                messages.success(request, "Draft updated.")
-                return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+                # Link to the list screen (adjust URL name if your project uses a different one)
+                drafts_url = reverse("mdu:proposed_change_list")
+
+                messages.success(
+                    request,
+                    mark_safe(
+                        'Draft saved. Review the table, then submit when ready. '
+                        f'To review your drafts, click <a href="{drafts_url}">here</a>.'
+                    )
+                )
+
+                # Decide where to go next based on the modal choice
+                next_action = request.POST.get("save_next", "stay")
+                if next_action == "back":
+                    return redirect("mdu:header_detail", pk=header.pk)
+
+                # Stay on the same edit screen
+                return redirect(f"{reverse('mdu:proposed_change_edit', kwargs={'pk': ch.pk})}?saved=1")
+
 
             payload = post.get("payload_json", "")
             dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
@@ -622,8 +832,15 @@ def proposed_change_edit(request, pk):
         "col_labels": col_labels,
         "dirty_cells": dirty_cells,
         "baseline_payload_json": baseline_payload_json,
+        "request_overview_open": request_overview_open,
+
+        # NEW: for scroll/focus + inline notification under table
+        "focus_row_index": focus_row_index,
+        "rows_added_count": rows_added_count,
+
         "editing": True,
         "ch": ch,
+        "change": ch,  # keep template compatibility if it expects 'change'
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -632,6 +849,7 @@ def proposed_change_edit(request, pk):
         ],
         **_role_flags(request.user),
     })
+
 
 
 
@@ -801,11 +1019,21 @@ def _visible_cols_from_rows(rows):
     string_cols = [f"string_{i:02d}" for i in range(1, 66)]
     return [c for c in string_cols if (header_row.get(c) or "").strip()]
 
-def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
+import csv
+import io
+import re
+import json
+
+_HEADER_RE = re.compile(r"^(string_\d{2})\b", re.IGNORECASE)
+
+def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols: list[str]):
     """
-    Reads CSV and appends VALUES rows as INSERT into payload_json.
-    Blocks if CSV includes business columns outside visible_cols.
-    Returns (new_payload_json, added_count, error_msg)
+    Appends CSV rows as INSERT rows to payload_json.
+    Accepts headers like:
+      - string_01
+      - string_01 (VALUE)
+      - string_01 - VALUE
+    Rejects extra string_nn columns not present in visible_cols.
     """
     if not uploaded_file:
         return payload_json, 0, "Please choose a CSV file to upload."
@@ -816,10 +1044,29 @@ def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
         return payload_json, 0, "Could not read CSV file. Please upload a UTF-8 CSV."
 
     reader = csv.DictReader(io.StringIO(text))
-    csv_cols = reader.fieldnames or []
+    fieldnames = reader.fieldnames or []
 
-    # Strict block: CSV has columns not visible in table
-    extra = [c for c in csv_cols if c and c.startswith("string_") and c not in visible_cols]
+    # map display header -> tech header
+    display_to_tech = {}
+    tech_cols_in_file = []
+
+    for h in fieldnames:
+        if not h:
+            continue
+        s = str(h).strip()
+        m = _HEADER_RE.match(s)
+        if not m:
+            continue
+        tech = m.group(1).lower()
+        display_to_tech[s] = tech
+        tech_cols_in_file.append(tech)
+
+    # if none recognized, it is not the template
+    if not tech_cols_in_file:
+        return payload_json, 0, "CSV headers do not match the expected template. Please download the template and use that."
+
+    # reject extra columns
+    extra = [t for t in tech_cols_in_file if t.startswith("string_") and t not in visible_cols]
     if extra:
         return payload_json, 0, (
             "Upload blocked. Your file contains columns not supported by this reference: "
@@ -827,7 +1074,6 @@ def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
             + ". Download the template again and do not add extra columns."
         )
 
-    # Parse payload
     try:
         obj = json.loads(payload_json or "{}")
     except Exception:
@@ -838,15 +1084,19 @@ def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
         rows_list = []
 
     added = 0
-    for row in reader:
+    for r in reader:
         new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+
         for c in visible_cols:
-            v = row.get(c, "")
+            v = ""
+            for display_h, tech in display_to_tech.items():
+                if tech == c:
+                    v = r.get(display_h, "")
+                    break
             if v is None:
                 v = ""
             new_row[c] = str(v).strip()
 
-        # skip empty rows
         if all((new_row.get(c) or "") == "" for c in visible_cols):
             continue
 
@@ -854,4 +1104,9 @@ def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols):
         added += 1
 
     obj["rows"] = rows_list
-    return json.dumps(obj, indent=2), added, None
+    new_payload = json.dumps(obj, indent=2)
+
+    if added == 0:
+        return new_payload, 0, "No rows were added (CSV had no non-empty rows)."
+
+    return new_payload, added, None
