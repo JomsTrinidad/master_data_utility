@@ -306,6 +306,35 @@ def compute_dirty_cells(baseline_payload_json: str, current_payload_json: str):
 
     return dirty
 
+def compute_baseline_update_ids(baseline_payload_json: str) -> dict[int, str]:
+    """
+    Builds baselineUpdateIds used by the UI to auto-populate update_rowid.
+    - Keyed by row index (same index used in table inputs)
+    - Hash is deterministic and based on business fields string_01..string_65
+    """
+    try:
+        base_obj = json.loads(baseline_payload_json or "{}")
+    except Exception:
+        base_obj = {}
+
+    rows = base_obj.get("rows", [])
+    if not isinstance(rows, list):
+        rows = []
+
+    # Import here to avoid refactors / circulars
+    from .validators import _deterministic_rowhash_from_values_row
+
+    out: dict[int, str] = {}
+    for idx, r in enumerate(rows):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("row_type") or "").lower() != "values":
+            continue
+        out[idx] = _deterministic_rowhash_from_values_row(r)
+
+    return out
+
+
 def _lock_meta_fields_for_maker(post, *, user, existing: ChangeRequest | None = None):
     """Enforce 'makers can't edit governance metadata' without breaking POST.
 
@@ -537,6 +566,7 @@ def propose_change(request, header_pk):
         "col_labels": col_labels,
         "dirty_cells": dirty_cells,
         "baseline_payload_json": baseline_payload_json,
+        "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
         "request_overview_open": request_overview_open,
 
         # NEW: for scroll/focus + inline notification under table
@@ -832,6 +862,7 @@ def proposed_change_edit(request, pk):
         "col_labels": col_labels,
         "dirty_cells": dirty_cells,
         "baseline_payload_json": baseline_payload_json,
+        "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
         "request_overview_open": request_overview_open,
 
         # NEW: for scroll/focus + inline notification under table
@@ -983,8 +1014,14 @@ def _safe_rows(payload_json: str):
 
 def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
     """
-    Takes existing payload_json and applies table cell edits from POST inputs:
-    cell__<row_index>__<colname> = value
+    Takes existing payload_json and applies:
+      1) table cell edits:
+         cell__<row_index>__<colname> = value
+      2) system-owned row intent + ids:
+         op__<row_index> = "" | "UPDATE" | "INSERT" | "DELETE"
+         update_rowid__<row_index> = <hash>
+         row_delete__<row_index> = "0" | "1"  (UI toggle; persisted by op/update_rowid)
+
     Returns updated payload_json string.
     """
     try:
@@ -996,7 +1033,7 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
     if not isinstance(rows, list):
         rows = []
 
-    # Apply edits
+    # ---------- 1) Apply business cell edits ----------
     for key, val in post_data.items():
         if not key.startswith("cell__"):
             continue
@@ -1009,10 +1046,39 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
         if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
             rows[idx][col] = val
 
+    # ---------- 2) Apply system-owned row intent + update_rowid ----------
+    for key, val in post_data.items():
+        # op__<idx>
+        if key.startswith("op__"):
+            try:
+                _, idx_str = key.split("__", 1)
+                idx = int(idx_str)
+            except Exception:
+                continue
+            if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
+                op = (val or "").strip().upper()
+                rows[idx]["operation"] = op  # "" allowed (RETAIN)
+            continue
+
+        # update_rowid__<idx>
+        if key.startswith("update_rowid__"):
+            try:
+                _, idx_str = key.split("__", 1)
+                idx = int(idx_str)
+            except Exception:
+                continue
+            if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
+                rows[idx]["update_rowid"] = (val or "").strip()
+            continue
+
+        # row_delete__<idx> is UI-facing; operation drives the loader meaning
+        # (kept here only to avoid dropping the POST field; no direct payload field needed)
+        if key.startswith("row_delete__"):
+            continue
+
     obj["rows"] = rows
     return json.dumps(obj, indent=2)
 
-import csv, io  # add at top of file too
 
 def _visible_cols_from_rows(rows):
     header_row = next((r for r in rows if (r.get("row_type") or "").lower() == "header"), {}) or {}

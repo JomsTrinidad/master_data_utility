@@ -95,70 +95,91 @@ def validate_change_request_payload(*, header, change_request) -> Tuple[List[str
 
 def validate_update_rowids_against_latest(*, header, change_request):
     """
-    Strict UPDATE pre-check (Option A):
-    Every values row with operation=UPDATE must have update_rowid
+    Strict pre-check (Row-Level Governance):
+    Every values row with operation=UPDATE or DELETE must have update_rowid
     and it must exist in the latest approved payload (as a current row).
+
+    Implementation notes:
+    - UI must never expose loader row IDs, so we validate update_rowid against
+      a deterministic hash computed from the latest approved VALUES rows.
+    - This assumes _deterministic_rowhash_from_values_row(r) is stable and matches
+      compute_baseline_update_ids() used by the UI.
     """
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     # If no approved baseline exists yet, skip (BUILD NEW scenario)
     latest = getattr(header, "last_approved_change", None)
     if not latest or not getattr(latest, "payload_json", None):
         return errors, warnings
 
-    # Build a set of "current" row identifiers from latest approved payload.
-    # Since Option A doesn't have loader rowid hashes, we use a pragmatic approach:
-    # treat the latest approved rows as the only valid targets, using a stable key.
-    #
-    # If your payload already includes a "row_id" or "rowid" (it shouldn't), we would use that,
-    # but per your rule rowid must not be present. So for now we validate that update_rowid
-    # matches some known identifier in approved data:
-    # - preferred: "update_rowid" matches a "row_key" column if you have one
-    # - fallback: treat update_rowid as an exact match to a concatenated natural key fields (not ideal)
-    #
-    # IMPORTANT: This function assumes your values rows contain a field called "row_key" or similar.
-    # If not, we can switch to a deterministic hash in-app for Option A.
-
-    latest_rows = _safe_rows(latest.payload_json)
-    latest_values = [r for r in latest_rows if isinstance(r, dict) and (r.get("row_type") or "").lower() == "values"]
-
-    # Best effort: if your payload contains a "row_key" field, validate update_rowid against it.
-    approved_keys = set()
-    for r in latest_values:
-        k = (r.get("row_key") or "").strip()
-        if k:
-            approved_keys.add(k)
-
-    # If there are no approved_keys, we cannot reliably validate update_rowid in Option A.
-    if not approved_keys:
+    # Import here to avoid surprise module-level dependencies / circulars
+    try:
+        from .validators import _deterministic_rowhash_from_values_row
+    except Exception:
+        # If this can't import, strict validation can't be enforced safely.
         warnings.append(
-            "Strict UPDATE pre-check is enabled, but no row_key exists in the approved baseline to validate update_rowid. "
-            "Add a stable row_key field (or enable in-app deterministic hashing) to enforce this fully."
+            "Strict UPDATE/DELETE pre-check could not load deterministic hashing helper. "
+            "Validation was skipped."
         )
         return errors, warnings
 
+    # Build a set of valid baseline row hashes from latest approved VALUES rows
+    latest_rows = _safe_rows(latest.payload_json)
+    latest_values = [
+        r for r in latest_rows
+        if isinstance(r, dict) and (r.get("row_type") or "").lower() == "values"
+    ]
+
+    approved_ids: set[str] = set()
+    for r in latest_values:
+        try:
+            h = (_deterministic_rowhash_from_values_row(r) or "").strip()
+        except Exception:
+            h = ""
+        if h:
+            approved_ids.add(h)
+
+    if not approved_ids:
+        warnings.append(
+            "Strict UPDATE/DELETE pre-check is enabled, but no approved baseline row identifiers "
+            "could be computed. Validation was skipped."
+        )
+        return errors, warnings
+
+    # Validate proposed payload rows
     rows = _safe_rows(change_request.payload_json)
-    value_rows = [r for r in rows if isinstance(r, dict) and (r.get("row_type") or "").lower() == "values"]
+    value_rows = [
+        r for r in rows
+        if isinstance(r, dict) and (r.get("row_type") or "").lower() == "values"
+    ]
+
+    # Treat UPDATE synonyms defensively (in case older drafts exist)
+    update_aliases = {"UPDATE", "UPDATE ROW", "UPDATE ROWS", "UPDATE ROW(S)"}
 
     for idx, r in enumerate(value_rows, start=1):
         op = (r.get("operation") or "").strip().upper()
-        if op in ("UPDATE", "UPDATE ROW", "UPDATE ROWS", "UPDATE ROW(S)"):
+
+        # Only enforce for UPDATE or DELETE
+        if op in update_aliases or op == "DELETE":
             upd = (r.get("update_rowid") or "").strip()
             if not upd:
-                errors.append(f"Values row {idx}: UPDATE operation requires update_rowid.")
+                errors.append(f"Values row {idx}: {op} operation requires update_rowid.")
                 continue
-            if upd not in approved_keys:
+
+            if upd not in approved_ids:
                 errors.append(
-                    f"Values row {idx}: update_rowid='{upd}' does not match any current row in the latest approved version."
+                    f"Values row {idx}: update_rowid='{upd}' does not match any current row "
+                    f"in the latest approved version."
                 )
 
     return errors, warnings
 
+
 def validate_update_rowids_against_latest_hash(*, header, change_request):
     """
     Strict UPDATE pre-check (Option A2):
-    Every VALUES row with operation=UPDATE must have update_rowid,
+    Every values row with operation=UPDATE or DELETE must have update_rowid,
     and that update_rowid must match a deterministic hash of at least one
     VALUES row in the latest approved payload_json.
 

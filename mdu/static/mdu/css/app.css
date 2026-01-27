@@ -28,6 +28,30 @@
 .clickable-row { cursor: pointer; }
 .clickable-row:focus { outline: 2px solid rgba(13,110,253,.28); outline-offset: -2px; }
 
+.breadcrumb {
+  --bs-breadcrumb-divider: '>';
+}
+
+/* =========================
+   Nav-style buttons (Back / Cancel) like the screenshot
+   ========================= */
+.mdu-btn-nav {
+  background: #fff;
+  border-color: rgba(0,0,0,.15);
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
+  padding: .5rem .9rem;
+  border-radius: .6rem;
+}
+
+.mdu-btn-nav:hover {
+  background: rgba(0,0,0,.02);
+}
+
+.mdu-btn-icon {
+  display: inline-block;
+  margin-right: .5rem;
+}
+
 /* =========================
    Catalog table containment + truncation
    ========================= */
@@ -93,7 +117,6 @@ table tbody td {
 
 /* =========================
    Sticky table container (Header Detail + any table using .sticky-table)
-   This is the working implementation you found in the header_detail <style>.
    ========================= */
 .sticky-table {
   --header-height: 54px;
@@ -185,6 +208,47 @@ table tbody td {
   color: rgba(33,37,41,.50) !important;
 }
 
+/* =========================
+   Propose Change: Request Overview look & feel
+   ========================= */
+.mdu-request-overview .accordion-item {
+  border: 0;
+  border-radius: .75rem;
+  background: #f6faff;
+}
+
+.mdu-request-overview .accordion-button {
+  background: transparent;
+  font-weight: 600;
+  color: rgba(13,110,253,.95);
+  border-radius: .75rem;
+}
+
+.mdu-request-overview .accordion-button:not(.collapsed) {
+  color: rgba(13,110,253,.95);
+  box-shadow: none;
+}
+
+.mdu-request-overview .accordion-body {
+  background: #f6faff;
+}
+
+/* Make the *-sm controls look like the screenshot (bigger, softer) only inside Request Overview */
+.mdu-request-overview .form-control-sm,
+.mdu-request-overview .form-select-sm {
+  padding: .6rem .75rem;
+  font-size: .95rem;
+  border-radius: .6rem;
+}
+
+.mdu-request-overview .form-label {
+  font-weight: 600;
+}
+
+.mdu-request-overview textarea {
+  min-height: 120px;
+}
+
 /* Dirty cell highlight (new baseline-driven approach) */
 .mdu-dirty {
   outline: 2px solid rgba(255, 193, 7, 0.8);
@@ -193,8 +257,6 @@ table tbody td {
 
 /* =========================
    Propose Change grid: 2D scroll + sticky header (NO frozen columns)
-   Keep this minimal so it doesn’t conflict with .sticky-table.
-   Use this for the editor table if you prefer mdu-grid-wrap.
    ========================= */
 .mdu-grid-wrap{
   max-height: 65vh;
@@ -204,14 +266,12 @@ table tbody td {
   border-radius: .5rem;
 }
 
-/* Table behavior inside editor scroll container */
 .mdu-grid-wrap table{
   min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
 }
 
-/* Sticky header within the editor scroll container */
 .mdu-grid-wrap thead th{
   position: sticky;
   top: 0;
@@ -229,3 +289,125 @@ table tbody td {
     rgba(13, 110, 253, 0)
   );
 }
+
+/* ============================
+   Locked vs Deleted Row Styling
+   Clear, calm, unambiguous
+   ============================ */
+
+/* ---------- DELETED ROW ---------- */
+/* Soft danger tint */
+table tbody tr.mdu-row-deleted > td,
+.sticky-table tbody tr.mdu-row-deleted > td {
+  background-color: #fdecee !important; /* soft red */
+}
+
+/* Strong left rail */
+table tbody tr.mdu-row-deleted {
+  border-left: 6px solid #dc3545 !important;
+}
+
+/* Deleted text */
+table tbody tr.mdu-row-deleted,
+table tbody tr.mdu-row-deleted td,
+table tbody tr.mdu-row-deleted input,
+table tbody tr.mdu-row-deleted select {
+  color: #842029 !important;
+  font-weight: 500;
+}
+
+/* ---------- LOCKED ROW ---------- */
+/* Calm “read-only” tint */
+table tbody tr.mdu-row-locked > td,
+.sticky-table tbody tr.mdu-row-locked > td {
+  background-color: #eef2f7 !important; /* slate/blue */
+}
+
+/* Subtle left rail */
+table tbody tr.mdu-row-locked {
+  border-left: 6px solid #6c757d !important;
+}
+
+/* Locked text */
+table tbody tr.mdu-row-locked,
+table tbody tr.mdu-row-locked td,
+table tbody tr.mdu-row-locked input,
+table tbody tr.mdu-row-locked select {
+  color: #495057 !important;
+  font-weight: 500;
+}
+
+/* ---------- INPUT FIXES ---------- */
+/* Inputs must not mask row tint */
+table tbody tr.mdu-row-locked input,
+table tbody tr.mdu-row-deleted input,
+table tbody tr.mdu-row-locked select,
+table tbody tr.mdu-row-deleted select,
+table tbody tr.mdu-row-locked textarea,
+table tbody tr.mdu-row-deleted textarea {
+  background-color: transparent !important;
+}
+
+/* Readonly affordance */
+table tbody tr.mdu-row-locked input[readonly],
+table tbody tr.mdu-row-deleted input[readonly] {
+  cursor: not-allowed;
+}
+
+/* ---------- ACTION BUTTON ---------- */
+/* Keep action visible without screaming */
+table tbody tr.mdu-row-locked .mdu-row-toggle-delete,
+table tbody tr.mdu-row-deleted .mdu-row-toggle-delete {
+  background: transparent !important;
+  color: #0d6efd !important;
+  font-weight: 500;
+}
+
+/* ---------- SAFETY: NO DOUBLE OVERRIDES ---------- */
+/* (intentionally no final override block) */
+
+/* ============================
+   Row delete / restore control
+   ============================ */
+
+.mdu-row-toggle-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  /* default (normal row) */
+  color: #6c757d;
+}
+
+/* Hover on normal rows = delete intent */
+tr:not(.mdu-row-deleted) .mdu-row-toggle-delete:hover {
+  color: #dc3545;
+  border-color: #dc3545;
+  background: rgba(220, 53, 69, 0.06);
+}
+
+/* Deleted row = restore intent (BLACK / WHITE, not blue) */
+tr.mdu-row-deleted .mdu-row-toggle-delete {
+  color: #212529;           /* Bootstrap body text (near-black) */
+  border-color: rgba(0,0,0,.25);
+  background: rgba(0,0,0,.04);
+}
+
+tr.mdu-row-deleted .mdu-row-toggle-delete:hover {
+  color: #000;
+  border-color: #000;
+  background: rgba(0,0,0,.08);
+}
+
+/* SVG icon inherits state color */
+.mdu-row-toggle-delete svg {
+  stroke-width: 1.75;
+  color: currentColor;
+}
+

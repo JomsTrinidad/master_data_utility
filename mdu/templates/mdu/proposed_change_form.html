@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load mdu_extras %}
+{% load static %}
 {% block title %}Propose Change{% endblock %}
 {% block content %}
 
@@ -18,6 +19,8 @@
       {% csrf_token %}
 
       <input type="hidden" name="baseline_payload_json" id="baselinePayload" value="{{ baseline_payload_json|default:''|escape }}">
+      
+      <input type="hidden" id="baselineUpdateIds" value="{{ baseline_update_ids_json|default:'{}'|escape }}">
 
       <input type="hidden" name="request_overview_open" id="requestOverviewOpen" value="{% if request_overview_open %}1{% else %}0{% endif %}">
 
@@ -33,7 +36,7 @@
 
         <!-- Request Overview (Accordion) -->
         <div class="col-12">
-          <div class="accordion" id="requestOverviewAccordion">
+          <div class="accordion mdu-request-overview" id="requestOverviewAccordion">
             <div class="accordion-item">
 
               <h2 class="accordion-header" id="headingRequestOverview">
@@ -46,11 +49,10 @@
                     data-bs-toggle="collapse"
                     data-bs-target="#collapseRequestOverview"
                     aria-expanded="{% if request_overview_open %}true{% else %}false{% endif %}"
-                    aria-controls="collapseRequestOverview">
-                    Request Overview — Click To Collapse
+                    aria-controls="collapseRequestOverview"
+                    >
+                    Request Overview
                   </button>
-
-
 
                 </div>
               </h2>
@@ -63,59 +65,16 @@
 
                 <div class="accordion-body pt-3">
 
-                  <div class="row g-3 align-items-end">
+                  <div class="row g-4">
 
                     <!-- Row 1: Tracking / Requested / Version / (spacer for alignment) -->
-                    <div class="col-lg-4">
-                      <label class="form-label">Change Tracking Id</label>
+                    <div class="col-md-4">
+                      <label class="form-label">Change Tracking ID</label>
                       <input class="form-control form-control-sm" value="{{ form.tracking_id.value }}" readonly>
                       <div class="form-text small">Used For Audit And Loader Matching.</div>
                     </div>
 
-                    <div class="col-lg-3">
-                      <label class="form-label">Requested By Sid</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ request.user.username }}" readonly>
-                        <input type="hidden" name="requested_by_sid" value="{{ request.user.username|escape }}">
-                      {% else %}
-                        {{ form.requested_by_sid }}
-                      {% endif %}
-                    </div>
-
-                    <div class="col-lg-2">
-                      <label class="form-label">Version</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.version.value|default:'' }}" readonly>
-                        <input type="hidden" name="version" value="{{ form.version.value|default:''|escape }}">
-                      {% else %}
-                        {{ form.version }}
-                      {% endif %}
-                    </div>
-
-
-
-                    <!-- Row 2: Approvers -->
-                    <div class="col-lg-3">
-                      <label class="form-label">Primary Approver Sid</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.primary_approver_sid.value|default:'' }}" readonly>
-                        <input type="hidden" name="primary_approver_sid" value="{{ form.primary_approver_sid.value|default:''|escape }}">
-                      {% else %}
-                        {{ form.primary_approver_sid }}
-                      {% endif %}
-                    </div>
-
-                    <div class="col-lg-3">
-                      <label class="form-label">Secondary Approver Sid</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.secondary_approver_sid.value|default:'' }}" readonly>
-                        <input type="hidden" name="secondary_approver_sid" value="{{ form.secondary_approver_sid.value|default:''|escape }}">
-                      {% else %}
-                        {{ form.secondary_approver_sid }}
-                      {% endif %}
-                    </div>
-
-                    <div class="col-lg-3">
+                    <div class="col-md-4">
                       <label class="form-label">Change Ticket Reference</label>
                       <input
                         class="form-control form-control-sm"
@@ -125,14 +84,51 @@
                         value="{{ form.change_ticket_ref.value|default:''|escape }}"
                         data-orig="{{ form.change_ticket_ref.value|default:''|escape }}"
                       >
-                    </div>
+                    </div>                    
 
-                    <div class="col-lg-3">
+
+                    <div class="col-md-4">
                       <label class="form-label">Change Category</label>
                       <div id="changeCategoryWrap" data-orig="{{ form.change_category.value|default:''|escape }}">
                         {{ form.change_category }}
                       </div>
                     </div>
+
+                    <div class="col-md-4">
+                      <label class="form-label">Requested By SID</label>
+                      {% if is_maker and not is_steward and not is_approver %}
+                        <input class="form-control form-control-sm" value="{{ request.user.username }}" readonly>
+                        <input type="hidden" name="requested_by_sid" value="{{ request.user.username|escape }}">
+                      {% else %}
+                        {{ form.requested_by_sid }}
+                      {% endif %}
+                    </div>
+
+
+
+
+                    <!-- Row 2: Approvers -->
+                    <div class="col-md-4">
+                      <label class="form-label">Primary Approver SID</label>
+                      {% if is_maker and not is_steward and not is_approver %}
+                        <input class="form-control form-control-sm" value="{{ form.primary_approver_sid.value|default:'' }}" readonly>
+                        <input type="hidden" name="primary_approver_sid" value="{{ form.primary_approver_sid.value|default:''|escape }}">
+                      {% else %}
+                        {{ form.primary_approver_sid }}
+                      {% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                      <label class="form-label">Secondary Approver SID</label>
+                      {% if is_maker and not is_steward and not is_approver %}
+                        <input class="form-control form-control-sm" value="{{ form.secondary_approver_sid.value|default:'' }}" readonly>
+                        <input type="hidden" name="secondary_approver_sid" value="{{ form.secondary_approver_sid.value|default:''|escape }}">
+                      {% else %}
+                        {{ form.secondary_approver_sid }}
+                      {% endif %}
+                    </div>
+
+
 
                     <!-- Row 3: Reason full width -->
                     <div class="col-12">
@@ -141,6 +137,7 @@
                         class="form-control form-control-sm"
                         name="change_reason"
                         id="changeReason"
+                        placeholder="Explain the reason for this change request..."
                         rows="3"
                         value=""
                         data-orig="{{ form.change_reason.value|default:''|escape }}"
@@ -191,8 +188,8 @@
           </div>
 
           <div class="ms-auto">
-            <a class="btn btn-sm btn-outline-secondary" id="backToReferenceBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
-              Back To Reference
+            <a class="btn btn-outline-secondary mdu-btn-nav" id="backToReferenceBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
+              <span class="mdu-btn-icon">←</span> Back To Reference
             </a>
           </div>
         </div>
@@ -200,13 +197,13 @@
 
           <div class="table-responsive sticky-table mt-2">
             <table class="table table-sm table-bordered align-middle mdu-edit-table">
+
               <thead>
                 <tr class="sticky-first-row">
-
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1">Row Type</th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-2">Operation</th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-3">Update Row Id</th>
-
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1" style="width:44px;"></th>
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-2">Row Type</th>
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-3">Operation</th>
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-4">Update Row Id</th>
 
                   {% for c in visible_cols %}
                     <th class="text-nowrap py-1 px-3">
@@ -217,46 +214,83 @@
                 </tr>
               </thead>
 
+
               <tbody class="small">
                 {% for r in rows %}
+                  {% with row_index=forloop.counter0 %}
                   <tr
                     {% if r.row_type|lower == "values" %}
-                      id="row-{{ forloop.counter0 }}"
+                      id="row-{{ row_index }}"
                     {% endif %}
-                    class="{% if r.row_type|lower == 'header' %}bg-body-tertiary{% endif %}">
+                    class="{% if r.row_type|lower == 'header' %}bg-body-tertiary{% endif %}"
+                  >
 
-
-                    <td class="text-nowrap mdu-sticky-col mdu-sticky-col-1">{{ r.row_type|default:"" }}</td>
-
-                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-2">
-                      <input class="form-control form-control-sm" value="{{ r.operation|default:'' }}" disabled>
+                    <!-- Trash / Undo (first column) -->
+                    <td class="text-nowrap mdu-sticky-col mdu-sticky-col-1">
+                      {% if r.row_type|lower == "values" and is_maker %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary mdu-row-toggle-delete"
+                                data-row-index="{{ row_index }}"
+                                aria-label="Delete Row">
+                          🗑
+                        </button>
+                        <input type="hidden"
+                              id="rowDelete-{{ row_index }}"
+                              name="row_delete__{{ row_index }}"
+                              value="{% if r.operation|default:''|upper == 'DELETE' %}1{% else %}0{% endif %}">
+                      {% endif %}
                     </td>
 
+                    <!-- Row Type -->
+                    <td class="text-nowrap mdu-sticky-col mdu-sticky-col-2">{{ r.row_type|default:"" }}</td>
+
+                    <!-- Operation (UI label, derived; never editable) -->
                     <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-3">
-                      <input class="form-control form-control-sm" value="{{ r.update_rowid|default:'' }}" disabled>
+                      <input class="form-control form-control-sm"
+                            id="opLabel-{{ row_index }}"
+                            value="{% if r.row_type|lower == 'header' %}—{% endif %}"
+                            readonly>
+                      <input type="hidden"
+                            id="opCode-{{ row_index }}"
+                            name="op__{{ row_index }}"
+                            value="{{ r.operation|default:''|upper }}">
+                    </td>
+
+                    <!-- Update Row Id (system-owned; readonly so it updates visually) -->
+                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-4">
+                      <input class="form-control form-control-sm"
+                            id="updateRowId-{{ row_index }}"
+                            name="update_rowid__{{ row_index }}"
+                            value="{{ r.update_rowid|default:'' }}"
+                            readonly>
                     </td>
 
                     {% for c in visible_cols %}
-                      {% with row_index=forloop.parentloop.counter0 %}
-                        {% if is_maker and r.row_type|lower == "values" %}
-                          <td>
-                            <input
-                              class="form-control form-control-sm business-cell {% if dirty_cells|get_item:row_index|get_item:c %}mdu-dirty{% endif %}"
-                              name="cell__{{ row_index }}__{{ c }}"
-                              value="{{ r|get_item:c|default:'' }}"
-                              data-orig="{{ r|get_item:c|default:''|escape }}"
-                            >
-                          </td>
-                        {% else %}
-                          <td>
-                            <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
-                          </td>
-                        {% endif %}
-                      {% endwith %}
+                      {% if is_maker and r.row_type|lower == "values" %}
+                        <td>
+                          <input
+                            class="form-control form-control-sm business-cell {% if dirty_cells|get_item:row_index|get_item:c %}mdu-dirty{% endif %}"
+                            name="cell__{{ row_index }}__{{ c }}"
+                            value="{{ r|get_item:c|default:'' }}"
+                            data-orig="{{ r|get_item:c|default:''|escape }}"
+                            data-row-index="{{ row_index }}"
+                            data-col="{{ c }}"
+                            {% if r.operation|default:''|upper == 'DELETE' %}readonly{% endif %}
+                          >
+                        </td>
+                      {% else %}
+                        <td>
+                          <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
+                        </td>
+                      {% endif %}
                     {% endfor %}
                   </tr>
+                  {% endwith %}
                 {% endfor %}
               </tbody>
+
+
+              
             </table>
           </div>
 
@@ -284,8 +318,8 @@
             </div>
 
             <div class="d-flex align-items-center gap-2">
-              <a class="btn btn-link text-muted px-2" id="cancelBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
-                Cancel
+              <a class="btn btn-outline-secondary mdu-btn-nav" id="cancelBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
+                <span class="mdu-btn-icon">←</span> Cancel
               </a>
 
               <button class="btn btn-outline-primary" type="button" id="saveDraftBtn" disabled
@@ -434,257 +468,7 @@
 
 {{ dirty_cells|json_script:"dirtyCellsJson" }}
 
-<script>
-(function () {
-  function $(id) { return document.getElementById(id); }
-
-  function parseJsonHidden(id) {
-    const el = $(id);
-    if (!el) return null;
-    try { return JSON.parse(el.value || "{}"); } catch (e) { return null; }
-  }
-
-  // Elements
-  const form = $("proposeForm");
-  const saveBtn = $("saveDraftBtn");
-
-  const accordionToggle = $("requestOverviewToggle");
-  const collapseEl = $("collapseRequestOverview");
-  const openInput = $("requestOverviewOpen");
-
-  const backBtn = $("backToReferenceBtn");
-  const cancelBtn = $("cancelBtn");
-
-  const bulkCsvInput = $("bulkCsvInput");
-  const bulkUploadBtn = $("bulkUploadBtn");
-  const bulkModal = $("bulkUploadModal");
-
-  const meta = $("draftUxMeta");
-  const rowsAddedCount = meta ? parseInt(meta.getAttribute("data-rows-added-count") || "0", 10) : 0;
-  const focusRowIndexRaw = meta ? (meta.getAttribute("data-focus-row-index") || "") : "";
-  const focusRowIndex = focusRowIndexRaw === "" ? null : parseInt(focusRowIndexRaw, 10);
-
-  // Save Draft modal elements
-  const saveNext = $("saveNext");                 // hidden input name="save_next"
-  const saveModalEl = $("saveDraftModal");        // modal id
-  const saveStayBtn = $("saveDraftStayBtn");      // Keep Editing
-  const saveBackBtn = $("saveDraftBackBtn");      // Return To Reference
-
-  // ---------- Accordion label + open state ----------
-  function setAccordionLabel(isExpanded) {
-    if (!accordionToggle) return;
-    accordionToggle.textContent = isExpanded
-      ? "Request Overview — Click To Collapse"
-      : "Request Overview — Click To Expand";
-  }
-
-  function setAccordionOpenHidden(isExpanded) {
-    if (openInput) openInput.value = isExpanded ? "1" : "0";
-  }
-
-  if (collapseEl) {
-    collapseEl.addEventListener("shown.bs.collapse", function () {
-      setAccordionLabel(true);
-      setAccordionOpenHidden(true);
-    });
-    collapseEl.addEventListener("hidden.bs.collapse", function () {
-      setAccordionLabel(false);
-      setAccordionOpenHidden(false);
-    });
-
-    const isExpanded = collapseEl.classList.contains("show");
-    setAccordionLabel(isExpanded);
-    setAccordionOpenHidden(isExpanded);
-  }
-
-  // ---------- Bulk upload button enable/disable ----------
-  function syncBulkUploadBtn() {
-    if (!bulkUploadBtn) return;
-    const ok = !!(bulkCsvInput && bulkCsvInput.files && bulkCsvInput.files.length > 0);
-    bulkUploadBtn.disabled = !ok;
-  }
-
-  if (bulkCsvInput) bulkCsvInput.addEventListener("change", syncBulkUploadBtn);
-
-  if (bulkModal) {
-    bulkModal.addEventListener("shown.bs.modal", syncBulkUploadBtn);
-    bulkModal.addEventListener("hidden.bs.modal", function () {
-      if (bulkCsvInput) bulkCsvInput.value = "";
-      syncBulkUploadBtn();
-    });
-  }
-
-  syncBulkUploadBtn();
-
-  // ---------- Baseline-driven dirty ----------
-  const baselineObj = parseJsonHidden("baselinePayload") || {};
-  const baselineRows = Array.isArray(baselineObj.rows) ? baselineObj.rows : [];
-
-  function baselineValue(rowIndex, col) {
-    const r = baselineRows[rowIndex];
-    if (!r) return null; // new row not in baseline
-    const v = r[col];
-    return (v === undefined || v === null) ? "" : String(v);
-  }
-
-  function recomputeAllDirty() {
-    const inputs = document.querySelectorAll("input.business-cell");
-    for (const input of inputs) {
-      const name = input.getAttribute("name") || "";
-      const m = name.match(/^cell__(\d+)__(string_\d{2})$/);
-      if (!m) continue;
-
-      const rowIndex = parseInt(m[1], 10);
-      const col = m[2];
-      const base = baselineValue(rowIndex, col);
-      const now = (input.value ?? "");
-
-      let isDirty = false;
-      if (base === null) isDirty = now.trim() !== "";
-      else isDirty = now !== base;
-
-      if (isDirty) input.classList.add("mdu-dirty");
-      else input.classList.remove("mdu-dirty");
-    }
-  }
-
-  // ---------- Save Draft enable/disable ----------
-  function makerFieldsDirty() {
-    const reason = $("changeReason");
-    const ticket = $("changeTicketRef");
-    const wrap = $("changeCategoryWrap");
-    const select = wrap ? wrap.querySelector("select") : null;
-
-    const changed = (el) => {
-      if (!el) return false;
-      const orig = el.getAttribute("data-orig") ?? "";
-      return (el.value ?? "") !== orig;
-    };
-
-    const catOrig = wrap ? (wrap.getAttribute("data-orig") ?? "") : "";
-    const catChanged = select ? ((select.value ?? "") !== catOrig) : false;
-
-    return changed(reason) || changed(ticket) || catChanged;
-  }
-
-  function updateSaveDraftState() {
-    const anyCellDirty = !!document.querySelector("input.business-cell.mdu-dirty");
-    const changed = anyCellDirty || makerFieldsDirty();
-    if (saveBtn) saveBtn.disabled = !changed;
-  }
-
-  document.addEventListener("input", function (e) {
-    const el = e.target;
-    if (!el) return;
-
-    if (el.classList && el.classList.contains("business-cell")) {
-      recomputeAllDirty();
-      updateSaveDraftState();
-      return;
-    }
-
-    if (el.id === "changeReason" || el.id === "changeTicketRef") {
-      updateSaveDraftState();
-      return;
-    }
-
-    if (el.tagName === "SELECT" && el.closest("#changeCategoryWrap")) {
-      updateSaveDraftState();
-      return;
-    }
-  });
-
-  // Initial compute
-  recomputeAllDirty();
-  updateSaveDraftState();
-
-  // ---------- Reduce bounce: collapse accordion before add_row / bulk_upload submits ----------
-  if (form && collapseEl) {
-    form.addEventListener("submit", function (e) {
-      const submitter = e.submitter;
-      if (!submitter) return;
-
-      const action = submitter.value;
-      if (action !== "add_row" && action !== "bulk_upload") return;
-
-      try {
-        setAccordionOpenHidden(false);
-        const bs = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
-        bs.hide();
-      } catch (err) {}
-    });
-  }
-
-  // ---------- Focus newly added row / show notice ----------
-  if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
-    setTimeout(function () {
-      const row = $("row-" + focusRowIndex);
-      if (row) {
-        row.scrollIntoView({ behavior: "auto", block: "center" });
-        const firstCell = row.querySelector("input.business-cell");
-        if (firstCell) firstCell.focus();
-      }
-      const notice = $("rowsAddedNotice");
-      if (notice) notice.scrollIntoView({ behavior: "auto", block: "nearest" });
-    }, 25);
-  }
-
-  // ---------- Save Draft modal actions (THIS is what makes the modal buttons work) ----------
-  function hideModal(el) {
-    if (!el) return;
-    try {
-      const inst = bootstrap.Modal.getOrCreateInstance(el);
-      inst.hide();
-    } catch (e) {}
-  }
-
-  function submitDraft(nextVal) {
-    if (!form) return;
-    if (saveNext) saveNext.value = nextVal; // "stay" or "back"
-    hideModal(saveModalEl);
-    // submit after modal starts closing to avoid flicker/focus jumps
-    setTimeout(function () {
-      form.requestSubmit();
-    }, 50);
-  }
-
-  if (saveStayBtn) {
-    saveStayBtn.addEventListener("click", function () { submitDraft("stay"); });
-  }
-  if (saveBackBtn) {
-    saveBackBtn.addEventListener("click", function () { submitDraft("back"); });
-  }
-
-  // ---------- Unsaved changes prompt (single handler; no duplicates) ----------
-  let navConfirmed = false;
-
-  function isDirtyForNav() {
-    if (rowsAddedCount > 0) return true;
-    if (document.querySelector("input.business-cell.mdu-dirty")) return true;
-    return makerFieldsDirty();
-  }
-
-  function bindNavConfirm(el) {
-    if (!el) return;
-    el.addEventListener("click", function (e) {
-      if (navConfirmed) return;
-      if (!isDirtyForNav()) return;
-
-      const ok = confirm("You Have Unsaved Changes. Leave This Page Without Saving?");
-      if (!ok) {
-        e.preventDefault();
-        return;
-      }
-      navConfirmed = true;
-    });
-  }
-
-  bindNavConfirm(backBtn);
-  bindNavConfirm(cancelBtn);
-})();
-</script>
-
-
+<script src="{% static 'mdu/js/propose_change.js' %}"></script>
 
 
 

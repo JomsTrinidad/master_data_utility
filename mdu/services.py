@@ -63,7 +63,13 @@ def generate_loader_artifacts(header, change, include_cert=False):
         out["version"] = r.get("version","")
         out["start_dt"] = r.get("start_dt","")
         out["end_dt"] = r.get("end_dt","")
-        out["operation"] = r.get("operation","")
+        op = (r.get("operation","") or "").strip().upper()
+        # UI uses UPDATE; loader expects row-level REPLACE
+        if op == "UPDATE":
+            op = "REPLACE"
+        # RETAIN is stored as "" (no action)
+        out["operation"] = op
+
         out["update_rowid"] = r.get("update_rowid","")
         for k in string_cols:
             if k in r:
