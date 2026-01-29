@@ -1,5 +1,18 @@
 (function () {
+  // Prevent browser from trying to restore scroll position after POST-back navigation
+  if ("scrollRestoration" in history) {
+    history.scrollRestoration = "manual";
+  }
+
+  // Hide body until scroll is restored to prevent flash
+  const savedScrollPos = sessionStorage.getItem('proposedDataScrollPos');
+  if (savedScrollPos) {
+    document.documentElement.style.visibility = 'hidden';
+  }
+
+
   function $(id) { return document.getElementById(id); }
+
 
   function parseJsonHidden(id) {
     const el = $(id);
@@ -9,6 +22,47 @@
 
   // Elements
   const form = $("proposeForm");
+
+  // ----------------------------------------------------
+  // Keep Request Overview expanded on Add New Row submit
+  // ----------------------------------------------------
+  form.addEventListener("submit", function (e) {
+    const submitter = e.submitter;
+    if (!submitter) return;
+
+    // If adding a new row but there are removed rows, force a save first
+    if (submitter.value === "add_row") {
+      const removedRows = document.querySelectorAll('tr.d-none.mdu-row-locked');
+      if (removedRows.length > 0) {
+        e.preventDefault();
+        alert("Please save your changes first (removed rows need to be saved) before adding new rows.");
+        
+        // Trigger save draft modal
+        if (saveBtn && !saveBtn.disabled) {
+          saveBtn.click();
+        }
+        return;
+      }
+      
+      // Save current scroll position before submit
+      sessionStorage.setItem('proposedDataScrollPos', window.pageYOffset || document.documentElement.scrollTop);
+
+
+
+
+      
+    }
+
+    // Only intervene for Add New Row
+    if (submitter.value !== "add_row") return;
+
+    // FORCE accordion open state into POST payload
+    const openInput = document.getElementById("requestOverviewOpen");
+    if (openInput) {
+      openInput.value = "1";
+    }
+  });
+
   const saveBtn = $("saveDraftBtn");
 
   const accordionToggle = $("requestOverviewToggle");
@@ -36,7 +90,7 @@
 
   function deleteIcon() {
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
           fill="none" viewBox="0 0 24 24">
         <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"
               stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
@@ -46,7 +100,7 @@
 
   function undoIcon() {
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
           fill="none" viewBox="0 0 24 24">
         <path d="M9 14l-4-4 4-4M5 10h8a6 6 0 110 12"
               stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
@@ -55,34 +109,10 @@
   }
 
 
+  // ---------- Request Overview (Always Open; No Collapse) ----------
+  // Keep POST-backed open flag stable, and do not attach any collapse handlers.
+  if (openInput) openInput.value = "1";
 
-
-  // ---------- Accordion label + open state ----------
-  function setAccordionLabel(isExpanded) {
-    if (!accordionToggle) return;
-    accordionToggle.textContent = isExpanded
-      ? "Request Overview — Click To Collapse"
-      : "Request Overview — Click To Expand";
-  }
-
-  function setAccordionOpenHidden(isExpanded) {
-    if (openInput) openInput.value = isExpanded ? "1" : "0";
-  }
-
-  if (collapseEl) {
-    collapseEl.addEventListener("shown.bs.collapse", function () {
-      setAccordionLabel(true);
-      setAccordionOpenHidden(true);
-    });
-    collapseEl.addEventListener("hidden.bs.collapse", function () {
-      setAccordionLabel(false);
-      setAccordionOpenHidden(false);
-    });
-
-    const isExpanded = collapseEl.classList.contains("show");
-    setAccordionLabel(isExpanded);
-    setAccordionOpenHidden(isExpanded);
-  }
 
   // ---------- Bulk upload button enable/disable ----------
   function syncBulkUploadBtn() {
@@ -243,7 +273,7 @@
       row.classList.add("mdu-row-deleted");
       row.classList.add("mdu-row-locked");
       if (btn) {
-        btn.textContent = "↩";
+        btn.innerHTML  = undoIcon(); //"↩";
         btn.setAttribute("aria-label", "Undo Delete");
       }
     } else {
@@ -264,7 +294,7 @@
       if (del) del.value = "0";
 
       if (btn) {
-        btn.textContent = "🗑";
+        btn.innerHTML  = deleteIcon();//"🗑";
         btn.setAttribute("aria-label", "Delete Row");
       }
 
@@ -338,27 +368,27 @@
 
     const row = document.getElementById(`row-${rowIndex}`);
 
-    // If it's a newly added (INSERT) row, "delete" means remove from view
-    if (rowIsNew(rowIndex) && row) {
+  // If it's a newly added (INSERT) row, "delete" means mark for removal
+  if (rowIsNew(rowIndex) && row) {
     // Clear values so the server doesn't treat it as an insert
-      const inputs = row.querySelectorAll("input.business-cell");
-      for (const i of inputs) {
-        i.value = "";
-        i.classList.remove("mdu-dirty");
-        i.readOnly = true;
-      }
-
-      setOp(rowIndex, "RETAIN", "");
-      setUpdateRowId(rowIndex, "");
-
-      // Mark as locked + removed
-      row.classList.add("mdu-row-locked");
-      row.classList.add("d-none");
-
-      updateSaveDraftState();
-      return;
+    const inputs = row.querySelectorAll("input.business-cell");
+    for (const i of inputs) {
+      i.value = "";
+      i.classList.remove("mdu-dirty");
+      i.readOnly = true;
     }
 
+    // Mark with a special operation code so server knows to skip this row
+    setOp(rowIndex, "REMOVED", "REMOVED");
+    setUpdateRowId(rowIndex, "");
+
+    // Mark as locked + removed
+    row.classList.add("mdu-row-locked");
+    row.classList.add("d-none");
+
+    updateSaveDraftState();
+    return;
+  }
 
     // Baseline rows: toggle DELETE / UNDO
     const del = document.getElementById(`rowDelete-${rowIndex}`);
@@ -396,36 +426,69 @@
     }
   })();
 
-  // ---------- Reduce bounce: collapse accordion before add_row / bulk_upload submits ----------
-  if (form && collapseEl) {
-    form.addEventListener("submit", function (e) {
-      const submitter = e.submitter;
-      if (!submitter) return;
-
-      const action = submitter.value;
-      if (action !== "add_row" && action !== "bulk_upload") return;
-
-      try {
-        setAccordionOpenHidden(false);
-        const bs = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
-        bs.hide();
-      } catch (err) {}
-    });
-  }
-
-  // ---------- Focus newly added row / show notice ----------
-  if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
-    setTimeout(function () {
-      const row = $("row-" + focusRowIndex);
-      if (row) {
-        row.scrollIntoView({ behavior: "auto", block: "center" });
-        const firstCell = row.querySelector("input.business-cell");
-        if (firstCell) firstCell.focus();
+  // ---------- Initialize all delete button icons ----------
+  (function initDeleteIcons() {
+    const deleteButtons = document.querySelectorAll('.mdu-row-toggle-delete');
+    for (const btn of deleteButtons) {
+      const rowIndex = parseInt(btn.getAttribute("data-row-index") || "", 10);
+      if (Number.isNaN(rowIndex)) continue;
+      
+      // Check if row is already marked for deletion
+      const del = document.getElementById(`rowDelete-${rowIndex}`);
+      if (del && del.value === "1") {
+        btn.innerHTML = undoIcon();
+      } else {
+        btn.innerHTML = deleteIcon();
       }
-      const notice = $("rowsAddedNotice");
-      if (notice) notice.scrollIntoView({ behavior: "auto", block: "nearest" });
-    }, 25);
+    }
+  })();
+
+  // ---------- Restore scroll and focus after Add Row ----------
+  if (savedScrollPos) {
+    // Restore scroll position immediately
+    window.scrollTo(0, parseInt(savedScrollPos, 10));
+    sessionStorage.removeItem('proposedDataScrollPos');
+    
+    // Make page visible again
+    document.documentElement.style.visibility = 'visible';
+    
+    // Also scroll the table to bottom and focus new row
+    if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
+      setTimeout(function () {
+        const scroller = $("proposedDataScroll");
+        const row = $("row-" + focusRowIndex);
+        
+        if (scroller && row) {
+          const rowTop = row.offsetTop;
+          scroller.scrollTop = Math.max(0, rowTop - Math.floor(scroller.clientHeight * 0.25));
+          
+          const firstCell = row.querySelector('input.business-cell:not([readonly])');
+          if (firstCell) {
+            firstCell.focus({ preventScroll: true });
+          }
+        }
+      }, 0);
+    }
+  } else if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
+    // No saved scroll position, just focus the new row normally
+    setTimeout(function () {
+      const scroller = $("proposedDataScroll");
+      const row = $("row-" + focusRowIndex);
+
+      if (scroller && row) {
+        const rowTop = row.offsetTop;
+        scroller.scrollTop = Math.max(0, rowTop - Math.floor(scroller.clientHeight * 0.25));
+        
+        const firstCell = row.querySelector('input.business-cell:not([readonly])');
+        if (firstCell) {
+          firstCell.focus({ preventScroll: true });
+        }
+      }
+    }, 0);
   }
+
+
+
 
   // ---------- Save Draft modal actions ----------
   function hideModal(el) {
