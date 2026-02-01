@@ -238,13 +238,13 @@
                         <button type="button"
                                 class="btn btn-sm btn-outline-secondary mdu-row-toggle-delete"
                                 data-row-index="{{ row_index }}"
-                                aria-label="Delete Row">
+                                aria-label="Retire Row">
                           🗑
                         </button>
                         <input type="hidden"
                               id="rowDelete-{{ row_index }}"
                               name="row_delete__{{ row_index }}"
-                              value="{% if r.operation|default:''|upper == 'DELETE' %}1{% else %}0{% endif %}">
+                              value="{% if r.operation|default:''|upper == 'RETIRE ROW' %}1{% else %}0{% endif %}">
                       {% endif %}
                     </td>
 
@@ -282,7 +282,7 @@
                             data-orig="{{ r|get_item:c|default:''|escape }}"
                             data-row-index="{{ row_index }}"
                             data-col="{{ c }}"
-                            {% if r.operation|default:''|upper == 'DELETE' %}readonly{% endif %}
+                            {% if r.operation|default:''|upper == 'RETIRE ROW' %}readonly{% endif %}
                           >
                         </td>
                       {% else %}

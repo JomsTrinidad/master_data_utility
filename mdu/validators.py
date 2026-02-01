@@ -96,7 +96,7 @@ def validate_change_request_payload(*, header, change_request) -> Tuple[List[str
 def validate_update_rowids_against_latest(*, header, change_request):
     """
     Strict pre-check (Row-Level Governance):
-    Every values row with operation=UPDATE or DELETE must have update_rowid
+    Every values row with operation=UPDATE ROW / RETIRE ROW / UNRETIRE ROW must have update_rowid
     and it must exist in the latest approved payload (as a current row).
 
     Implementation notes:
@@ -119,7 +119,7 @@ def validate_update_rowids_against_latest(*, header, change_request):
     except Exception:
         # If this can't import, strict validation can't be enforced safely.
         warnings.append(
-            "Strict UPDATE/DELETE pre-check could not load deterministic hashing helper. "
+            "Strict UPDATE/RETIRE pre-check could not load deterministic hashing helper. "
             "Validation was skipped."
         )
         return errors, warnings
@@ -142,7 +142,7 @@ def validate_update_rowids_against_latest(*, header, change_request):
 
     if not approved_ids:
         warnings.append(
-            "Strict UPDATE/DELETE pre-check is enabled, but no approved baseline row identifiers "
+            "Strict UPDATE/RETIRE pre-check is enabled, but no approved baseline row identifiers "
             "could be computed. Validation was skipped."
         )
         return errors, warnings
@@ -160,8 +160,8 @@ def validate_update_rowids_against_latest(*, header, change_request):
     for idx, r in enumerate(value_rows, start=1):
         op = (r.get("operation") or "").strip().upper()
 
-        # Only enforce for UPDATE or DELETE
-        if op in update_aliases or op == "DELETE":
+        # Only enforce for operations that target an existing row
+        if op in update_aliases or op in {"RETIRE ROW", "UNRETIRE ROW", "DELETE"}:
             upd = (r.get("update_rowid") or "").strip()
             if not upd:
                 errors.append(f"Values row {idx}: {op} operation requires update_rowid.")
@@ -179,7 +179,7 @@ def validate_update_rowids_against_latest(*, header, change_request):
 def validate_update_rowids_against_latest_hash(*, header, change_request):
     """
     Strict UPDATE pre-check (Option A2):
-    Every values row with operation=UPDATE or DELETE must have update_rowid,
+    Every values row with operation=UPDATE ROW / RETIRE ROW / UNRETIRE ROW must have update_rowid,
     and that update_rowid must match a deterministic hash of at least one
     VALUES row in the latest approved payload_json.
 
@@ -212,15 +212,25 @@ def validate_update_rowids_against_latest_hash(*, header, change_request):
         if isinstance(r, dict) and (r.get("row_type") or "").lower() == "values"
     ]
 
-    def _is_update(op: str) -> bool:
+    def _targets_existing_row(op: str) -> bool:
         op = (op or "").strip().upper()
-        return op in {"UPDATE", "UPDATE ROW", "UPDATE ROWS", "UPDATE ROW(S)"}
+        return op in {
+            "UPDATE",
+            "UPDATE ROW",
+            "UPDATE ROWS",
+            "UPDATE ROW(S)",
+            "REPLACE",
+            "RETIRE ROW",
+            "DELETE",  # legacy
+            "UNRETIRE ROW",
+            "UNRETIRE",
+        }
 
     for idx, r in enumerate(value_rows, start=1):
-        if _is_update(r.get("operation")):
+        if _targets_existing_row(r.get("operation")):
             upd = (r.get("update_rowid") or "").strip()
             if not upd:
-                errors.append(f"Values row {idx}: UPDATE operation requires update_rowid.")
+                errors.append(f"Values row {idx}: UPDATE/RETIRE/UNRETIRE requires update_rowid.")
                 continue
             if upd not in approved_hashes:
                 errors.append(

@@ -162,7 +162,7 @@ def bulk_upload_csv(request, pk):
 
     added = 0
     for row in reader:
-        new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+        new_row = {"row_type": "values", "operation": "INSERT ROW", "update_rowid": ""}
 
         for c in visible_cols:
             # Find which display header maps to this tech col

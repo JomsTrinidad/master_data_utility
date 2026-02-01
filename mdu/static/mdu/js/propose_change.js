@@ -167,7 +167,7 @@
       const rowIndex = parseInt(m[1], 10);
       const col = m[2];
 
-      // DELETE overrides dirty visuals
+      // RETIRE ROW overrides dirty visuals
       if (isRowDeleted(rowIndex)) {
         input.classList.remove("mdu-dirty");
         continue;
@@ -188,6 +188,10 @@
   // ---------- Row intent derivation + delete/undo ----------
   const preDeleteSnapshots = new Map(); // rowIndex -> { col -> value }
 
+  // label: what the user sees in the Operation column
+  // code: what gets POSTed back to Django (must match locked UI labels)
+  // Allowed codes: KEEP ROW | UPDATE ROW | INSERT ROW | RETIRE ROW | UNRETIRE ROW
+  // Internal code (never meant to be persisted): SKIP (used when undoing an INSERT row)
   function setOp(rowIndex, label, code) {
     const opLabel = document.getElementById(`opLabel-${rowIndex}`);
     const opCode = document.getElementById(`opCode-${rowIndex}`);
@@ -221,14 +225,14 @@
 
     if (isRowDeleted(rowIndex)) {
       const hash = baselineUpdateIds[rowIndex] || "";
-      setOp(rowIndex, "DELETE", "DELETE");
+      setOp(rowIndex, "RETIRE ROW", "RETIRE ROW");
       setUpdateRowId(rowIndex, hash);
       return;
     }
 
     if (rowIsNew(rowIndex)) {
-      // UX rule: a newly added row defaults to INSERT even if still blank
-      setOp(rowIndex, "INSERT", "INSERT");
+      // UX rule: a newly added row defaults to INSERT ROW even if still blank
+      setOp(rowIndex, "INSERT ROW", "INSERT ROW");
       setUpdateRowId(rowIndex, "");
       return;
     }
@@ -237,10 +241,10 @@
     const anyDirty = !!document.querySelector(`#row-${rowIndex} input.business-cell.mdu-dirty`);
     if (anyDirty) {
       const hash = baselineUpdateIds[rowIndex] || "";
-      setOp(rowIndex, "UPDATE", "UPDATE");
+      setOp(rowIndex, "UPDATE ROW", "UPDATE ROW");
       setUpdateRowId(rowIndex, hash);
     } else {
-      setOp(rowIndex, "RETAIN", "");
+      setOp(rowIndex, "KEEP ROW", "KEEP ROW");
       setUpdateRowId(rowIndex, "");
     }
   }
@@ -274,7 +278,7 @@
       row.classList.add("mdu-row-locked");
       if (btn) {
         btn.innerHTML  = undoIcon(); //"↩";
-        btn.setAttribute("aria-label", "Undo Delete");
+        btn.setAttribute("aria-label", "Undo Retire");
       }
     } else {
       // restore snapshot
@@ -295,7 +299,7 @@
 
       if (btn) {
         btn.innerHTML  = deleteIcon();//"🗑";
-        btn.setAttribute("aria-label", "Delete Row");
+    btn.setAttribute("aria-label", "Retire Row");
       }
 
 
@@ -368,7 +372,7 @@
 
     const row = document.getElementById(`row-${rowIndex}`);
 
-  // If it's a newly added (INSERT) row, "delete" means mark for removal
+  // If it's a newly added (INSERT ROW) row, clicking the trash icon just hides it
   if (rowIsNew(rowIndex) && row) {
     // Clear values so the server doesn't treat it as an insert
     const inputs = row.querySelectorAll("input.business-cell");
@@ -378,8 +382,9 @@
       i.readOnly = true;
     }
 
-    // Mark with a special operation code so server knows to skip this row
-    setOp(rowIndex, "REMOVED", "REMOVED");
+    // Mark with an internal operation code so server can skip this row
+    // (SKIP is never shown to users and should not be included in audits)
+    setOp(rowIndex, "", "SKIP");
     setUpdateRowId(rowIndex, "");
 
     // Mark as locked + removed
@@ -390,7 +395,7 @@
     return;
   }
 
-    // Baseline rows: toggle DELETE / UNDO
+    // Baseline rows: toggle RETIRE ROW / UNDO
     const del = document.getElementById(`rowDelete-${rowIndex}`);
     if (!del) return;
 
@@ -415,11 +420,12 @@
 
       const rowIndex = parseInt(m[1], 10);
 
-      // If payload already has DELETE, ensure toggle reflects it and styling applied
+      // If payload already has RETIRE ROW, ensure toggle reflects it and styling applied
       const opCode = document.getElementById(`opCode-${rowIndex}`);
-      const alreadyDelete = opCode && (opCode.value || "").toUpperCase() === "DELETE";
+      const opNow = opCode ? (opCode.value || "").toUpperCase() : "";
+      const alreadyRetired = opNow === "RETIRE ROW" || opNow === "DELETE"; // legacy
       const del = document.getElementById(`rowDelete-${rowIndex}`);
-      if (del && alreadyDelete) del.value = "1";
+      if (del && alreadyRetired) del.value = "1";
 
       if (del && del.value === "1") applyDeleteUI(rowIndex, true);
       else deriveRowIntent(rowIndex);

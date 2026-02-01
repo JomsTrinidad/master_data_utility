@@ -397,52 +397,61 @@ def _current_baseline_for_header(header: MDUHeader) -> tuple[str, int | None]:
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
 
-    # Non-collab guardrail: block NEW proposals if there is a SUBMITTED change.
+    # Non-collab guardrail: block NEW proposals if there is an OPEN change.
+    # OPEN = DRAFT or SUBMITTED. For SINGLE_OWNER, route user to the existing open CR.
     if header.collaboration_mode == "SINGLE_OWNER":
-        submitted_ch = (
+        open_ch = (
             header.changes
-            .filter(status=ChangeRequest.Status.SUBMITTED)
+            .filter(status__in=[ ChangeRequest.Status.SUBMITTED])
             .order_by("-updated_at", "-id")
             .first()
         )
-        if submitted_ch:
+
+        if open_ch:
             messages.error(
                 request,
                 "A pending change already exists for this reference. Please wait for approval or rejection before proposing a new change."
             )
-            return redirect("mdu:proposed_change_detail", pk=submitted_ch.pk)
+
+            # SUBMITTED (or anything unexpected that is open) goes to detail
+            return redirect("mdu:proposed_change_detail", pk=open_ch.pk)
+
 
     baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
     baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
 
-    # Draft picker: maker-only drafts for this reference (multiple drafts allowed)
+    # Draft picker: maker-only drafts for this reference
     drafts_qs = (
         header.changes
         .filter(status=ChangeRequest.Status.DRAFT, created_by=request.user)
         .order_by("-updated_at", "-id")
     )
-    drafts = list(drafts_qs)
 
     def _draft_is_aligned(d: ChangeRequest) -> bool:
+        # Prefer version compare when both are known
         if d.version is not None and baseline_version_latest is not None:
             return d.version == baseline_version_latest
+        # Fallback to payload fingerprint compare
         return _normalized_payload_fingerprint(d.payload_json or "") == baseline_fp_latest
 
+    drafts = list(drafts_qs)
     aligned_draft = None
     stale_drafts = []
+
     for d in drafts:
         if aligned_draft is None and _draft_is_aligned(d):
             aligned_draft = d
         else:
             stale_drafts.append(d)
 
+    # Breadcrumbs (consistent with other screens)
     breadcrumbs = [
         _crumb("Catalog", reverse("mdu:catalog")),
         _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
         _crumb("Propose Change", None),
     ]
 
-    # GET: if drafts exist, show picker (never auto-redirect)
+    # GET: if any drafts exist, show picker
     if request.method != "POST" and drafts:
         latest_id = drafts[0].id
         return render(request, "mdu/draft_picker.html", {
@@ -455,123 +464,215 @@ def propose_change(request, header_pk):
             **_role_flags(request.user),
         })
 
-    # POST: draft picker actions
+    # POST: picker actions (no auto-save unless explicitly saving in the editor)
+    if request.method == "POST":
+        post = request.POST.copy()
+
+        if post.get("picker") == "1":
+            action = (post.get("action") or "").strip()
+
+            if action == "use_aligned":
+                if not aligned_draft:
+                    messages.error(request, "No current draft was found to continue.")
+                    return redirect("mdu:header_detail", pk=header.pk)
+                return redirect("mdu:proposed_change_edit", pk=aligned_draft.pk)
+
+            if action == "discard_replace_aligned":
+                if aligned_draft:
+                    aligned_draft.delete()
+                    messages.warning(
+                        request,
+                        f"A saved draft already existed for {header.ref_name}. It was discarded and a new draft will be created using the latest approved version."
+                    )
+
+                # Open baseline editor (NO SAVE)
+                initial_payload = baseline_payload_latest
+                baseline_payload_json = initial_payload
+                dirty_cells = {}
+                request_overview_open = True
+
+                form = ProposedChangeForm(initial={
+                    "tracking_id": _suggest_tracking_id(),
+                    "override_retired_flag": "N",
+                    "payload_json": initial_payload,
+                })
+
+                payload = initial_payload
+                rows = payload_rows(payload)
+
+                header_row = next(
+                    (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+                    {}
+                ) or {}
+                string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+                visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+                col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
+
+                return render(request, "mdu/proposed_change_form.html", {
+                    "header": header,
+                    "form": form,
+                    "rows": rows,
+                    "visible_cols": visible_cols,
+                    "col_labels": col_labels,
+                    "dirty_cells": dirty_cells,
+                    "baseline_payload_json": baseline_payload_json,
+                    "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
+                    "request_overview_open": request_overview_open,
+                    "focus_row_index": None,
+                    "rows_added_count": 0,
+                    "editing": False,
+                    "ch": None,
+                    "change": None,
+                    "breadcrumbs": breadcrumbs,
+                    **_role_flags(request.user),
+                })
+
+            if action == "create_new":
+                # Open baseline editor (NO SAVE)
+                initial_payload = baseline_payload_latest
+                baseline_payload_json = initial_payload
+                dirty_cells = {}
+                request_overview_open = True
+
+                form = ProposedChangeForm(initial={
+                    "tracking_id": _suggest_tracking_id(),
+                    "override_retired_flag": "N",
+                    "payload_json": initial_payload,
+                })
+
+                payload = initial_payload
+                rows = payload_rows(payload)
+
+                header_row = next(
+                    (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
+                    {}
+                ) or {}
+                string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+                visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
+                col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
+
+                return render(request, "mdu/proposed_change_form.html", {
+                    "header": header,
+                    "form": form,
+                    "rows": rows,
+                    "visible_cols": visible_cols,
+                    "col_labels": col_labels,
+                    "dirty_cells": dirty_cells,
+                    "baseline_payload_json": baseline_payload_json,
+                    "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
+                    "request_overview_open": request_overview_open,
+                    "focus_row_index": None,
+                    "rows_added_count": 0,
+                    "editing": False,
+                    "ch": None,
+                    "change": None,
+                    "breadcrumbs": breadcrumbs,
+                    **_role_flags(request.user),
+                })
+
+            if action == "view_draft":
+                try:
+                    did = int(post.get("draft_id") or "0")
+                except Exception:
+                    did = 0
+                d = drafts_qs.filter(id=did).first()
+                if not d:
+                    messages.error(request, "Draft not found.")
+                    return redirect("mdu:header_detail", pk=header.pk)
+                return redirect("mdu:proposed_change_detail", pk=d.pk)
+
+            if action == "discard_draft":
+                try:
+                    did = int(post.get("draft_id") or "0")
+                except Exception:
+                    did = 0
+                d = drafts_qs.filter(id=did).first()
+                if not d:
+                    messages.error(request, "Draft not found.")
+                    return redirect("mdu:header_detail", pk=header.pk)
+                d.delete()
+                messages.success(request, "Draft discarded.")
+                return redirect("mdu:propose_change", header_pk=header.pk)
+
+
+    # GET: if drafts exist, show picker instead of jumping directly
+    if request.method != "POST" and drafts_qs.exists():
+        latest_id = drafts_qs.first().id
+        return render(request, "mdu/draft_picker.html", {
+            "header": header,
+            "drafts": drafts_qs,
+            "latest_id": latest_id,
+            "baseline_version_latest": baseline_version_latest,
+            **_role_flags(request.user),
+        })
+
+    # POST from picker: user chose a draft or requested a fresh one
     if request.method == "POST" and (request.POST.get("picker") == "1"):
         action = (request.POST.get("action") or "").strip()
 
-        if action == "use_aligned":
-            if not aligned_draft:
-                messages.error(request, "No current draft was found to continue.")
-                return redirect("mdu:header_detail", pk=header.pk)
-            return redirect("mdu:proposed_change_edit", pk=aligned_draft.pk)
+        if action == "use_draft":
+            try:
+                draft_id = int(request.POST.get("draft_id") or "0")
+            except Exception:
+                draft_id = 0
 
-        if action == "discard_replace_aligned":
-            if aligned_draft:
-                aligned_draft.delete()
+            ch = drafts_qs.filter(id=draft_id).first()
+            if not ch:
+                messages.error(request, "Selected draft was not found.")
+                return redirect("mdu:header_detail", pk=header.pk)
+
+            # Determine if draft aligns to current baseline:
+            # Prefer version compare when available; fallback to payload fingerprint compare.
+            draft_is_stale = False
+            if ch.version is not None and baseline_version_latest is not None:
+                draft_is_stale = (ch.version != baseline_version_latest)
+            else:
+                draft_fp = _normalized_payload_fingerprint(ch.payload_json or "")
+                draft_is_stale = (draft_fp != baseline_fp_latest)
+
+            if draft_is_stale:
+                # Show confirm screen: discard old draft + create new aligned to latest baseline
+                return render(request, "mdu/draft_picker.html", {
+                    "header": header,
+                    "drafts": drafts_qs,
+                    "latest_id": drafts_qs.first().id if drafts_qs.exists() else None,
+                    "baseline_version_latest": baseline_version_latest,
+                    "stale_draft_id": ch.id,
+                    "stale_draft_display_id": ch.display_id,
+                    "stale_draft_updated_at": ch.updated_at,
+                    "show_stale_confirm": True,
+                    **_role_flags(request.user),
+                })
+
+            # Draft is aligned -> continue editing it
+            return redirect("mdu:proposed_change_edit", pk=ch.pk)
+
+        if action == "discard_and_create_new":
+            try:
+                stale_id = int(request.POST.get("stale_draft_id") or "0")
+            except Exception:
+                stale_id = 0
+
+            stale = drafts_qs.filter(id=stale_id).first()
+            if stale:
+                stale.delete()
                 messages.warning(
                     request,
-                    f"A saved draft already existed for {header.ref_name}. It was discarded and a new draft will be created using the latest approved version."
+                    f"An older draft was found for {header.ref_name}. It was discarded and a new draft will be created using the latest approved version."
                 )
 
-            # Render baseline editor (NO SAVE unless user explicitly clicks Save Draft)
-            initial_payload = baseline_payload_latest
-            form = ProposedChangeForm(initial={
-                "tracking_id": _suggest_tracking_id(),
-                "payload_json": initial_payload,
-            })
-            rows = payload_rows(initial_payload)
-
-            header_row = next(
-                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
-                {}
-            ) or {}
-            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
-            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
-            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
-
-            return render(request, "mdu/proposed_change_form.html", {
-                "header": header,
-                "form": form,
-                "rows": rows,
-                "visible_cols": visible_cols,
-                "col_labels": col_labels,
-                "dirty_cells": {},
-                "baseline_payload_json": initial_payload,
-                "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(initial_payload)),
-                "request_overview_open": True,
-                "focus_row_index": None,
-                "rows_added_count": 0,
-                "editing": False,
-                "ch": None,
-                "change": None,
-                "breadcrumbs": breadcrumbs,
-                **_role_flags(request.user),
-            })
+            # Fall through into normal propose_change flow (create new baseline-aligned draft)
+            # We reset request.method handling by continuing; the code below will handle POST normally.
 
         if action == "create_new":
-            # Render baseline editor (NO SAVE unless user explicitly clicks Save Draft)
-            initial_payload = baseline_payload_latest
-            form = ProposedChangeForm(initial={
-                "tracking_id": _suggest_tracking_id(),
-                "payload_json": initial_payload,
-            })
-            rows = payload_rows(initial_payload)
+            # Fall through into normal propose_change flow (create new baseline-aligned draft)
+            pass
 
-            header_row = next(
-                (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
-                {}
-            ) or {}
-            string_cols = [f"string_{i:02d}" for i in range(1, 66)]
-            visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
-            col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
 
-            return render(request, "mdu/proposed_change_form.html", {
-                "header": header,
-                "form": form,
-                "rows": rows,
-                "visible_cols": visible_cols,
-                "col_labels": col_labels,
-                "dirty_cells": {},
-                "baseline_payload_json": initial_payload,
-                "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(initial_payload)),
-                "request_overview_open": True,
-                "focus_row_index": None,
-                "rows_added_count": 0,
-                "editing": False,
-                "ch": None,
-                "change": None,
-                "breadcrumbs": breadcrumbs,
-                **_role_flags(request.user),
-            })
 
-        if action == "view_draft":
-            try:
-                did = int(request.POST.get("draft_id") or "0")
-            except Exception:
-                did = 0
-            d = drafts_qs.filter(id=did).first()
-            if not d:
-                messages.error(request, "Draft not found.")
-                return redirect("mdu:header_detail", pk=header.pk)
-            return redirect("mdu:proposed_change_detail", pk=d.pk)
 
-        if action == "discard_draft":
-            try:
-                did = int(request.POST.get("draft_id") or "0")
-            except Exception:
-                did = 0
-            d = drafts_qs.filter(id=did).first()
-            if not d:
-                messages.error(request, "Draft not found.")
-                return redirect("mdu:header_detail", pk=header.pk)
-            d.delete()
-            messages.success(request, "Draft discarded.")
-            return redirect("mdu:propose_change", header_pk=header.pk)
 
-        # Unknown picker action -> go back
-        return redirect("mdu:header_detail", pk=header.pk)
 
-    # No drafts exist -> fall through into normal baseline editor (GET)
     if header.status == MDUHeader.Status.RETIRED:
         messages.warning(
             request,
@@ -579,35 +680,126 @@ def propose_change(request, header_pk):
         )
 
     request_overview_open = True
+
     dirty_cells = {}
+    baseline_payload_json = ""
+
+    # Used by template to scroll/focus and show inline "X rows added"
     focus_row_index = None
     rows_added_count = 0
 
+    # ----------------------------
+    # GET: initialize baseline + form
+    # ----------------------------
     if request.method != "POST":
-        initial_payload = baseline_payload_latest
-        form = ProposedChangeForm(initial={
-            "tracking_id": _suggest_tracking_id(),
-            "payload_json": initial_payload,
-        })
-        payload = initial_payload
-        rows = payload_rows(payload)
+        if header.last_approved_change and header.last_approved_change.payload_json:
+            initial_payload = header.last_approved_change.payload_json
+        else:
+            initial_payload = json.dumps({
+                "rows": [
+                    {
+                        "row_type": "header",
+                        "operation": "BUILD NEW",
+                        "start_dt": "",
+                        "end_dt": "",
+                        "version": "",
+                        "string_01": "BUS_FIELD_01",
+                        "string_02": "BUS_FIELD_02",
+                        "string_03": "BUS_FIELD_03",
+                    }
+                ]
+            }, indent=2)
+
         baseline_payload_json = initial_payload
 
+        form = ProposedChangeForm(initial={
+            "tracking_id": _suggest_tracking_id(),
+            "override_retired_flag": "N",
+            "payload_json": initial_payload,
+        })
+
+        payload = initial_payload
+        rows = payload_rows(payload)
+
+    # ----------------------------
+    # POST: bulk upload / insert row / save draft
+    # ----------------------------
     else:
         post = request.POST.copy()
-        request_overview_open = (post.get("request_overview_open") == "1")
+        # Draft picker actions (do NOT save on create-new)
+        # When user chooses "Create New Draft" from the picker, render the baseline editor
+        # (same as GET) and let the user decide whether to Save Draft.
+        if post.get("picker") == "1" and post.get("action") in ("create_new", "discard_and_create_new"):
+            if header.last_approved_change and header.last_approved_change.payload_json:
+                initial_payload = header.last_approved_change.payload_json
+            else:
+                initial_payload = json.dumps({
+                    "rows": [
+                        {
+                            "row_type": "header",
+                            "operation": "BUILD NEW",
+                            "start_dt": "",
+                            "end_dt": "",
+                            "version": "",
+                            "string_01": "BUS_FIELD_01",
+                            "string_02": "BUS_FIELD_02",
+                            "string_03": "BUS_FIELD_03",
+                        }
+                    ]
+                }, indent=2)
 
-        baseline_payload_json = post.get("baseline_payload_json", "") or baseline_payload_latest
+            baseline_payload_json = initial_payload
 
-        post["payload_json"] = _apply_cell_edits_to_payload_json(
-            post.get("payload_json", ""),
-            post
-        )
-        _lock_meta_fields_for_maker(post, user=request.user)
+            form = ProposedChangeForm(initial={
+                "tracking_id": _suggest_tracking_id(),
+                "override_retired_flag": "N",
+                "payload_json": initial_payload,
+            })
 
-        action = post.get("action")
+            payload = initial_payload
+            rows = payload_rows(payload)
 
+            # keep overview open by default
+            request_overview_open = True
+
+            # Skip the rest of POST handling (no add_row/bulk_upload/save)
+            # and continue to the shared render() at the bottom.
+        else:
+            # existing POST logic continues below
+            pass
+
+        post = request.POST.copy()
+
+        if not (post.get("picker") == "1" and post.get("action") in ("create_new", "discard_and_create_new")):
+            request_overview_open = (post.get("request_overview_open") == "1")
+
+            # baseline comes from hidden input; fallback to current payload_json
+            baseline_payload_json = post.get("baseline_payload_json", "") or post.get("payload_json", "")
+
+            # Apply any edits from grid inputs into payload_json
+            post["payload_json"] = _apply_cell_edits_to_payload_json(
+                post.get("payload_json", ""),
+                post
+            )
+
+            _lock_meta_fields_for_maker(post, user=request.user)
+
+            action = post.get("action")  # only exists on POST
+
+
+
+        # ----- Bulk upload (NO draft creation) -----
         if action == "bulk_upload":
+            # capture pre-count so we can focus the first newly added row
+            try:
+                obj_before = json.loads(post.get("payload_json", "") or "{}")
+            except Exception:
+                obj_before = {}
+            rows_list_before = obj_before.get("rows", [])
+            if not isinstance(rows_list_before, list):
+                rows_list_before = []
+            pre_count = len(rows_list_before)
+
             temp_rows = payload_rows(post.get("payload_json", ""))
             visible_cols_now = _visible_cols_from_rows(temp_rows)
 
@@ -617,22 +809,25 @@ def propose_change(request, header_pk):
                 rows = temp_rows
                 form = ProposedChangeForm(post)
                 dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
+
             else:
                 new_payload, added, err = _append_csv_rows_as_inserts(
                     post.get("payload_json", ""),
                     request.FILES.get("bulk_csv"),
                     visible_cols_now
                 )
+
                 if err:
                     messages.error(request, err)
                     rows_added_count = 0
                     focus_row_index = None
                 else:
                     rows_added_count = added
-                    focus_row_index = None
                     if added > 0:
+                        focus_row_index = pre_count  # first newly added row
                         messages.success(request, f"Added {added} rows from CSV.")
                     else:
+                        focus_row_index = None
                         messages.warning(request, "No rows were added (CSV had no non-empty rows).")
 
                 post["payload_json"] = new_payload
@@ -641,6 +836,7 @@ def propose_change(request, header_pk):
                 form = ProposedChangeForm(post)
                 dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
+        # Insert new row (no save yet) -> re-render
         elif action == "add_row":
             try:
                 obj = json.loads(post.get("payload_json", "") or "{}")
@@ -651,7 +847,7 @@ def propose_change(request, header_pk):
             if not isinstance(rows_list, list):
                 rows_list = []
 
-            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+            new_row = {"row_type": "values", "operation": "INSERT ROW", "update_rowid": ""}
             for i in range(1, 66):
                 new_row[f"string_{i:02d}"] = ""
 
@@ -659,6 +855,7 @@ def propose_change(request, header_pk):
             obj["rows"] = rows_list
             post["payload_json"] = json.dumps(obj, indent=2)
 
+            # row added UX signals
             rows_added_count = 1
             focus_row_index = len(rows_list) - 1
 
@@ -667,6 +864,7 @@ def propose_change(request, header_pk):
             form = ProposedChangeForm(post)
             dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
+        # Normal save draft path
         else:
             form = ProposedChangeForm(post)
             if form.is_valid():
@@ -678,19 +876,29 @@ def propose_change(request, header_pk):
                 if not ch.tracking_id:
                     ch.tracking_id = _suggest_tracking_id()
 
+                # Snapshot collaboration mode for DB constraints + workflow rules
                 ch.collaboration_mode = header.collaboration_mode
+
+                # Stamp baseline version so we can detect stale drafts later
+                _, baseline_version_latest = _current_baseline_for_header(header)
                 ch.version = baseline_version_latest
 
                 try:
                     ch.save()
                 except IntegrityError:
+                    # DB constraint: one open CR per non-collab reference (SINGLE_OWNER)
+                    # Convert race-condition into the standard guardrail message.
                     messages.error(
                         request,
                         "A pending change already exists for this reference. Please wait for approval or rejection before proposing a new change."
                     )
                     return redirect("mdu:header_detail", pk=header.pk)
 
+
+
+
                 drafts_url = reverse("mdu:proposed_change_list")
+
                 messages.success(
                     request,
                     mark_safe(
@@ -703,12 +911,17 @@ def propose_change(request, header_pk):
                 if next_action == "back":
                     return redirect("mdu:header_detail", pk=header.pk)
 
+                # Stay on edit screen and tag URL so we can auto-show a “saved” toast
                 return redirect(f"{reverse('mdu:proposed_change_edit', kwargs={'pk': ch.pk})}?saved=1")
 
+            # invalid form -> re-render with errors + preserve dirty
             payload = post.get("payload_json", "")
             rows = payload_rows(payload)
             dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
 
+    # ----------------------------
+    # Shared column layout (match header_detail)
+    # ----------------------------
     header_row = next(
         (r for r in (rows or []) if (r.get("row_type") or "").lower() == "header"),
         {}
@@ -728,9 +941,16 @@ def propose_change(request, header_pk):
         "baseline_payload_json": baseline_payload_json,
         "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
         "request_overview_open": request_overview_open,
+
+        # NEW: for scroll/focus + inline notification under table
         "focus_row_index": focus_row_index,
         "rows_added_count": rows_added_count,
-        "breadcrumbs": breadcrumbs,
+
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
+            _crumb("Propose Change", None),
+        ],
         **_role_flags(request.user),
     })
 
@@ -814,21 +1034,22 @@ def proposed_change_edit(request, pk):
     rows_added_count = 0
 
     if request.method != "POST":
-        # Baseline drives dirty detection (latest approved).
+
+        # Baseline must always be the latest approved payload (dirty detection is baseline-driven).
         baseline_payload_json = (
             header.last_approved_change.payload_json
             if header.last_approved_change and header.last_approved_change.payload_json
             else ""
         )
 
-        # The editor must render the DRAFT payload, not the baseline.
+        form = ProposedChangeForm(instance=ch)
+
+        # Render the DRAFT payload (not the baseline)
         payload = ch.payload_json or baseline_payload_json
         rows = payload_rows(payload)
 
-        # Dirty cells must be computed on GET so highlighting survives reloads / redirects.
+        # Dirty cells must be computed on GET so highlighting survives reload/redirect
         dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
-
-        form = ProposedChangeForm(instance=ch)
 
 
     else:
@@ -865,7 +1086,7 @@ def proposed_change_edit(request, pk):
             if not isinstance(rows_list, list):
                 rows_list = []
 
-            new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+            new_row = {"row_type": "values", "operation": "INSERT ROW", "update_rowid": ""}
             for i in range(1, 66):
                 new_row[f"string_{i:02d}"] = ""
 
@@ -970,7 +1191,7 @@ def proposed_change_edit(request, pk):
                             added = 0
 
                             for r in reader:
-                                new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+                                new_row = {"row_type": "values", "operation": "INSERT ROW", "update_rowid": ""}
 
                                 for c in visible_cols:
                                     v = ""
@@ -1024,14 +1245,23 @@ def proposed_change_edit(request, pk):
 
                 ch2 = form.save(commit=False)
 
+                # IMPORTANT: carry over any fields that are not part of the form
+                ch2.header = ch.header
+                ch2.display_id = ch.display_id
+                ch2.created_by = ch.created_by
+                ch2.status = ch.status
+                ch2.version = ch.version
+
                 # Snapshot collaboration mode for DB constraints + workflow rules
-                ch2.collaboration_mode = ch2.header.collaboration_mode
+                ch2.collaboration_mode = ch.header.collaboration_mode
+
+                # Persist the edited payload_json that we computed above (server truth)
+                ch2.payload_json = post.get("payload_json", ch.payload_json) or ""
 
                 # Bump lock version on every successful save
                 ch2.lock_version = ch.lock_version + 1
 
-                ch2.save(update_fields=["collaboration_mode", "lock_version", "updated_at"] + [
-                    # Keep existing behavior: ProposedChangeForm writes these fields
+                ch2.save(update_fields=[
                     "tracking_id",
                     "requested_by_sid",
                     "business_owner_sid",
@@ -1042,7 +1272,11 @@ def proposed_change_edit(request, pk):
                     "change_ticket_ref",
                     "change_category",
                     "payload_json",
+                    "collaboration_mode",
+                    "lock_version",
+                    "updated_at",
                 ])
+
 
 
                 # Link to the list screen (adjust URL name if your project uses a different one)
@@ -1178,9 +1412,7 @@ def proposed_change_decide(request, pk, decision):
         ch.status = ChangeRequest.Status.APPROVED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
-        ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
-
+        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
 
         header = ch.header
         header.last_approved_change = ch
@@ -1192,9 +1424,7 @@ def proposed_change_decide(request, pk, decision):
         ch.status = ChangeRequest.Status.REJECTED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
-        ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
-
+        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
         messages.info(request, "Rejected.")
 
     else:
@@ -1266,7 +1496,7 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
       1) table cell edits:
          cell__<row_index>__<colname> = value
       2) system-owned row intent + ids:
-         op__<row_index> = "" | "UPDATE" | "INSERT" | "DELETE"
+         op__<row_index> = "" | "KEEP ROW" | "UPDATE ROW" | "INSERT ROW" | "RETIRE ROW" | "UNRETIRE ROW"
          update_rowid__<row_index> = <hash>
          row_delete__<row_index> = "0" | "1"  (UI toggle; persisted by op/update_rowid)
 
@@ -1305,7 +1535,28 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
                 continue
             if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
                 op = (val or "").strip().upper()
-                rows[idx]["operation"] = op  # "" allowed (RETAIN)
+
+                # Backward-compat and normalization (older payloads / older UI posts)
+                legacy_map = {
+                    "RETAIN": "KEEP ROW",
+                    "KEEP": "KEEP ROW",
+                    "UPDATE": "UPDATE ROW",
+                    "INSERT": "INSERT ROW",
+                    "DELETE": "RETIRE ROW",
+                    "UNRETIRE": "UNRETIRE ROW",
+                }
+                op = legacy_map.get(op, op)
+
+                # Empty op means "KEEP ROW" for baseline-aligned rows
+                if not op:
+                    op = "KEEP ROW"
+
+                # Internal-only op used by JS when undoing a brand-new INSERT row.
+                # These rows are removed from the payload before saving.
+                if op == "SKIP":
+                    rows[idx]["operation"] = "SKIP"
+                else:
+                    rows[idx]["operation"] = op
             continue
 
         # update_rowid__<idx>
@@ -1323,6 +1574,9 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
         # (kept here only to avoid dropping the POST field; no direct payload field needed)
         if key.startswith("row_delete__"):
             continue
+
+    # Drop internal-only hidden rows
+    rows = [r for r in rows if not (isinstance(r, dict) and (r.get("operation") == "SKIP"))]
 
     obj["rows"] = rows
     return json.dumps(obj, indent=2)
@@ -1395,7 +1649,7 @@ def _append_csv_rows_as_inserts(payload_json: str, uploaded_file, visible_cols: 
 
     added = 0
     for r in reader:
-        new_row = {"row_type": "values", "operation": "INSERT", "update_rowid": ""}
+        new_row = {"row_type": "values", "operation": "INSERT ROW", "update_rowid": ""}
 
         for c in visible_cols:
             v = ""

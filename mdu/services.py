@@ -64,10 +64,19 @@ def generate_loader_artifacts(header, change, include_cert=False):
         out["start_dt"] = r.get("start_dt","")
         out["end_dt"] = r.get("end_dt","")
         op = (r.get("operation","") or "").strip().upper()
-        # UI uses UPDATE; loader expects row-level REPLACE
-        if op == "UPDATE":
+        # UI labels are locked (KEEP ROW/UPDATE ROW/INSERT ROW/RETIRE ROW/UNRETIRE ROW).
+        # Loader artifacts keep legacy action codes where required.
+        if op in {"UPDATE", "UPDATE ROW"}:
             op = "REPLACE"
-        # RETAIN is stored as "" (no action)
+        elif op in {"INSERT", "INSERT ROW"}:
+            op = "INSERT"
+        elif op in {"DELETE", "RETIRE ROW"}:
+            op = "DELETE"
+        elif op in {"UNRETIRE", "UNRETIRE ROW"}:
+            op = "UNRETIRE"
+        elif op in {"KEEP", "KEEP ROW", "RETAIN", ""}:
+            op = ""  # no action
+
         out["operation"] = op
 
         out["update_rowid"] = r.get("update_rowid","")
