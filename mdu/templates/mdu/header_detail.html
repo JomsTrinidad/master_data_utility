@@ -196,11 +196,18 @@
 
               <div class="row g-2">
                 <div class="col-12">
-                  <div class="text-muted small">Primary Approver</div>
+                  <div class="text-muted small">Business Owner SID</div>
                   <div class="fw-semibold">
-                    {% if latest and latest.primary_approver_sid %}{{ latest.primary_approver_sid }}{% else %}—{% endif %}
+                    {% if latest and latest.business_owner_sid %}{{ latest.business_owner_sid }}{% else %}—{% endif %}
+                  </div>
+
+                  <div class="text-muted small mt-2">Approver AD Group Name</div>
+                  <div class="fw-semibold">
+                    {% if latest and latest.approver_ad_group %}{{ latest.approver_ad_group }}{% else %}—{% endif %}
                   </div>
                 </div>
+
+
 
                 <div class="col-12">
                   <div class="text-muted small">Risk Impact</div>

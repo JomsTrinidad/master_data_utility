@@ -16,6 +16,8 @@
       <a class="btn btn-outline-primary" href="{% url 'mdu:proposed_change_edit' pk=ch.pk %}">Edit</a>
       <form method="post" action="{% url 'mdu:proposed_change_submit' pk=ch.pk %}">
         {% csrf_token %}
+        <input type="hidden" name="draft_uuid" value="{{ ch.draft_uuid }}">
+        <input type="hidden" name="lock_version" value="{{ ch.lock_version }}">
         <button class="btn btn-primary" type="submit">Submit for approval</button>
       </form>
     {% endif %}

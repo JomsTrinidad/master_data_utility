@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Continue Draft{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <div class="text-muted small">Reference</div>
+  <h3 class="mb-0">{{ header.ref_name }}</h3>
+  <div class="text-muted">Saved drafts were found for this reference.</div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+
+    {% if aligned_draft %}
+      <div class="alert alert-info">
+        <div class="fw-semibold mb-1">Draft Already Exists For The Latest Version</div>
+        <div>
+          A saved draft already exists for <span class="fw-semibold">{{ header.ref_name }}</span>
+          and it aligns to the latest approved baseline.
+        </div>
+        <div class="mt-2">
+          Would you like to use it, or discard and replace it with a new draft?
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="picker" value="1">
+            <input type="hidden" name="action" value="use_aligned">
+            <button type="submit" class="btn btn-primary">Use Existing Draft</button>
+          </form>
+
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="picker" value="1">
+            <input type="hidden" name="action" value="discard_replace_aligned">
+            <button type="submit" class="btn btn-outline-primary">Discard &amp; Replace</button>
+          </form>
+
+          <a class="btn btn-link" href="{% url 'mdu:header_detail' pk=header.pk %}">Cancel</a>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-info">
+        <div class="fw-semibold mb-1">No Current Draft For The Latest Version</div>
+        <div>
+          Drafts exist for <span class="fw-semibold">{{ header.ref_name }}</span>, but none align to the latest approved baseline.
+          You may view or discard older drafts, or create a new draft using the latest version.
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="picker" value="1">
+            <input type="hidden" name="action" value="create_new">
+            <button type="submit" class="btn btn-primary">Create New Draft</button>
+          </form>
+          <a class="btn btn-link" href="{% url 'mdu:header_detail' pk=header.pk %}">Cancel</a>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if stale_drafts %}
+      <div class="mt-3">
+        <div class="fw-semibold mb-2">Older Drafts (Read-Only)</div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>Draft</th>
+                <th>Last Updated</th>
+                <th style="width: 1%"></th>
+                <th style="width: 1%"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in stale_drafts %}
+                <tr>
+                  <td>
+                    <div class="fw-semibold">{{ d.display_id }}</div>
+                    {% if d.id == latest_id %}
+                      <div class="text-muted small">Latest (overall)</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ d.updated_at }}</td>
+
+                  <td class="text-end">
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="picker" value="1">
+                      <input type="hidden" name="action" value="view_draft">
+                      <input type="hidden" name="draft_id" value="{{ d.id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary">View</button>
+                    </form>
+                  </td>
+
+                  <td class="text-end">
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="picker" value="1">
+                      <input type="hidden" name="action" value="discard_draft">
+                      <input type="hidden" name="draft_id" value="{{ d.id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Discard</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

@@ -44,7 +44,7 @@ def generate_loader_artifacts(header, change, include_cert=False):
     rows = payload_rows(change.payload_json)
 
     standard_cols = [
-        "requested_by_sid","primary_approver_sid","secondary_approver_sid","tracking_id",
+        "requested_by_sid","business_owner_sid","approver_ad_group","tracking_id",
         "ref_name","ref_type","mode","row_type","version","start_dt","end_dt","operation","update_rowid"
     ]
     string_cols = [f"string_{i:02d}" for i in range(1,66)]
@@ -53,8 +53,8 @@ def generate_loader_artifacts(header, change, include_cert=False):
     def row_out(r):
         out = {c:"" for c in cols}
         out["requested_by_sid"] = change.requested_by_sid
-        out["primary_approver_sid"] = change.primary_approver_sid
-        out["secondary_approver_sid"] = change.secondary_approver_sid
+        out["business_owner_sid"] = change.business_owner_sid
+        out["approver_ad_group"] = change.approver_ad_group
         out["tracking_id"] = change.tracking_id
         out["ref_name"] = header.ref_name
         out["ref_type"] = header.ref_type
@@ -84,7 +84,7 @@ def generate_loader_artifacts(header, change, include_cert=False):
             writer.writerow(row_out(r))
 
     meta_cols = [
-        "ref_name","tracking_id","requested_by_sid","primary_approver_sid","secondary_approver_sid",
+        "ref_name","tracking_id","requested_by_sid","business_owner_sid","approver_ad_group",
         "change_reason","change_ticket_ref","change_category","risk_impact","request_source_channel","request_source_system",
         "override_retired_flag"
     ]
@@ -96,8 +96,8 @@ def generate_loader_artifacts(header, change, include_cert=False):
             "ref_name": header.ref_name,
             "tracking_id": change.tracking_id,
             "requested_by_sid": change.requested_by_sid,
-            "primary_approver_sid": change.primary_approver_sid,
-            "secondary_approver_sid": change.secondary_approver_sid,
+            "business_owner_sid": change.business_owner_sid,
+            "approver_ad_group": change.approver_ad_group,
             "change_reason": change.change_reason,
             "change_ticket_ref": change.change_ticket_ref,
             "change_category": change.change_category,
@@ -106,6 +106,7 @@ def generate_loader_artifacts(header, change, include_cert=False):
             "request_source_system": change.request_source_system,
             "override_retired_flag": change.override_retired_flag,
         })
+
 
     files = [values_path, meta_path]
 

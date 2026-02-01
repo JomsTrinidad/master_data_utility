@@ -537,4 +537,26 @@
 
   bindNavConfirm(backBtn);
   bindNavConfirm(cancelBtn);
+
+  // ---------- Auto-dismiss "Rows Added" notification ----------
+(function () {
+    const notice = document.getElementById("rowsAddedNotice");
+    if (!notice) return;
+
+    // Auto-hide after 30 seconds (adjust later if needed)
+    window.setTimeout(function () {
+      // If Bootstrap JS is available, use its alert close animation
+      try {
+        if (window.bootstrap && bootstrap.Alert) {
+          const inst = bootstrap.Alert.getOrCreateInstance(notice);
+          inst.close();
+          return;
+        }
+      } catch (e) {}
+
+      // Fallback: remove from DOM
+      notice.remove();
+    }, 5000);
+  })();
+
 })();

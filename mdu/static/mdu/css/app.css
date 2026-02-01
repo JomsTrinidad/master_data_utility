@@ -312,7 +312,7 @@ table tbody tr.mdu-row-deleted,
 table tbody tr.mdu-row-deleted td,
 table tbody tr.mdu-row-deleted input,
 table tbody tr.mdu-row-deleted select {
-  color: #842029 !important;
+  color: #84202877 !important;
   font-weight: 500;
 }
 
@@ -333,7 +333,7 @@ table tbody tr.mdu-row-locked,
 table tbody tr.mdu-row-locked td,
 table tbody tr.mdu-row-locked input,
 table tbody tr.mdu-row-locked select {
-  color: #495057 !important;
+  color: #842029 !important;
   font-weight: 500;
 }
 

@@ -20,6 +20,13 @@
 
       <input type="hidden" name="baseline_payload_json" id="baselinePayload" value="{{ baseline_payload_json|default:''|escape }}">
       
+      {% if editing %}
+        <input type="hidden" name="draft_uuid" value="{{ ch.draft_uuid }}">
+        <input type="hidden" name="lock_version" value="{{ ch.lock_version }}">
+      {% endif %}
+
+
+
       <input type="hidden" id="baselineUpdateIds" value="{{ baseline_update_ids_json|default:'{}'|escape }}">
 
       
@@ -107,24 +114,25 @@
 
                     <!-- Row 2: Approvers -->
                     <div class="col-md-4">
-                      <label class="form-label">Primary Approver SID</label>
+                      <label class="form-label">Business Owner SID</label>
                       {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.primary_approver_sid.value|default:'' }}" readonly>
-                        <input type="hidden" name="primary_approver_sid" value="{{ form.primary_approver_sid.value|default:''|escape }}">
+                        <input class="form-control form-control-sm" value="{{ form.business_owner_sid.value|default:'' }}" readonly>
+                        <input type="hidden" name="business_owner_sid" value="{{ form.business_owner_sid.value|default:''|escape }}">
                       {% else %}
-                        {{ form.primary_approver_sid }}
+                        {{ form.business_owner_sid }}
                       {% endif %}
                     </div>
 
                     <div class="col-md-4">
-                      <label class="form-label">Secondary Approver SID</label>
+                      <label class="form-label">Approver AD Group Name</label>
                       {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.secondary_approver_sid.value|default:'' }}" readonly>
-                        <input type="hidden" name="secondary_approver_sid" value="{{ form.secondary_approver_sid.value|default:''|escape }}">
+                        <input class="form-control form-control-sm" value="{{ form.approver_ad_group.value|default:'' }}" readonly>
+                        <input type="hidden" name="approver_ad_group" value="{{ form.approver_ad_group.value|default:''|escape }}">
                       {% else %}
-                        {{ form.secondary_approver_sid }}
+                        {{ form.approver_ad_group }}
                       {% endif %}
                     </div>
+
 
 
 
@@ -462,6 +470,8 @@
 
 
 {{ dirty_cells|json_script:"dirtyCellsJson" }}
+
+
 
 
 <script src="{% static 'mdu/js/propose_change.js' %}"></script>

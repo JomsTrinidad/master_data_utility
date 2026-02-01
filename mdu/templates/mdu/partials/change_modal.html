@@ -47,14 +47,11 @@
       </div>
 
       <div class="col-12 col-md-4">
-        <div class="text-muted small">Approved by</div>
-        <div class="fw-semibold">
-          {% if change.status == "APPROVED" %}
-            {{ change.primary_approver_sid|default:"—" }}
-          {% else %}
-            <span class="text-muted">—</span>
-          {% endif %}
-        </div>
+        <div class="text-muted small">Business Owner SID</div>
+        <div class="fw-semibold">{{ change.business_owner_sid|default:"—" }}</div>
+
+        <div class="text-muted small mt-2">Approver AD Group Name</div>
+        <div class="fw-semibold">{{ change.approver_ad_group|default:"—" }}</div>
       </div>
 
       <div class="col-12 col-md-4">
