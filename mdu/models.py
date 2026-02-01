@@ -162,6 +162,11 @@ class ChangeRequest(models.Model):
     decided_at = models.DateTimeField(null=True, blank=True)
     decision_note = models.TextField(blank=True, default="")
 
+    decided_by_sid = models.CharField(max_length=40, blank=True, default="")
+
+    override_scope_flag = models.BooleanField(default=False)
+    override_scope_reason = models.CharField(max_length=400, blank=True, default="")
+
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_changes"
     )
@@ -315,6 +320,46 @@ class MDUValidationRule(models.Model):
 
     def __str__(self):
         return f"{self.header.ref_name} · {self.rule_name}"
+
+
+class MDUApproverScopeRule(models.Model):
+    class ScopeType(models.TextChoices):
+        GLOBAL = "GLOBAL", "Global"
+        REGIONAL = "REGIONAL", "Regional"
+        LOB = "LOB", "LOB"
+        DOMAIN = "DOMAIN", "Domain"
+
+    header = models.ForeignKey(MDUHeader, on_delete=models.CASCADE, related_name="approver_scope_rules")
+
+    scope_type = models.CharField(
+        max_length=20,
+        choices=ScopeType.choices,
+        default=ScopeType.GLOBAL,
+    )
+    scope_value = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Example: GLOBAL, APAC, EMEA, NAM, OPS, CSI",
+    )
+
+    approver_ad_group = models.CharField(max_length=120)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["header", "scope_type", "scope_value", "approver_ad_group"],
+                name="uniq_scope_rule_per_header",
+            )
+        ]
+
+    def __str__(self):
+        sv = self.scope_value or "—"
+        return f"{self.header.ref_name} · {self.scope_type}:{sv} · {self.approver_ad_group}"
 
 
 # ------------------------------

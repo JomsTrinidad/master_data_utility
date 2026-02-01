@@ -1178,7 +1178,9 @@ def proposed_change_decide(request, pk, decision):
         ch.status = ChangeRequest.Status.APPROVED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
+        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
+        ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
+
 
         header = ch.header
         header.last_approved_change = ch
@@ -1190,7 +1192,9 @@ def proposed_change_decide(request, pk, decision):
         ch.status = ChangeRequest.Status.REJECTED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
+        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
+        ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
+
         messages.info(request, "Rejected.")
 
     else:

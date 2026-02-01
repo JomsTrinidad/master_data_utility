@@ -10,18 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameField(
-            model_name='changerequest',
-            old_name='primary_approver_sid',
-            new_name='business_owner_sid',
-        ),
-        migrations.RemoveField(
-            model_name='changerequest',
-            name='secondary_approver_sid',
-        ),
-        migrations.AddField(
-            model_name='changerequest',
-            name='approver_ad_group',
-            field=models.CharField(blank=True, default='', max_length=120),
-        ),
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
+
     ]
