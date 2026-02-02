@@ -21,6 +21,8 @@ urlpatterns = [
 
     # Proposed changes
     path("proposed/", views.proposed_change_list, name="proposed_change_list"),
+    path("approvals/", views.my_approvals, name="my_approvals"),
+    path("proposed/drafts/bulk-delete/", views.draft_bulk_delete, name="draft_bulk_delete"),
     path("references/<int:header_pk>/propose/", views.propose_change, name="propose_change"),
     path("proposed/<int:pk>/", views.proposed_change_detail, name="proposed_change_detail"),
     path("proposed/<int:pk>/edit/", views.proposed_change_edit, name="proposed_change_edit"),

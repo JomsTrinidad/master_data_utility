@@ -3,6 +3,15 @@ import json
 
 register = template.Library()
 
+
+@register.filter
+def in_group(user, group_name: str) -> bool:
+    """Template helper: {% if request.user|in_group:'approver' %}."""
+    try:
+        return user.is_authenticated and user.groups.filter(name=group_name).exists()
+    except Exception:
+        return False
+
 @register.filter
 def get_item(d, key):
     if isinstance(d, dict):

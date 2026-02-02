@@ -48,25 +48,23 @@
             <div class="accordion-item">
 
               <h2 class="accordion-header" id="headingRequestOverview">
-                <div class="d-flex align-items-center justify-content-between w-100">
-
-                  <div
-                    id="requestOverviewToggle"
-                    class="accordion-button"
-                    role="heading"
-                    aria-level="2"
-                    style="cursor:default; user-select:none;"
-                  >
-                    Request Overview
-                  </div>
-
-                </div>
+                <button
+                  id="requestOverviewToggle"
+                  class="accordion-button"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#collapseRequestOverview"
+                  aria-expanded="{% if request_overview_open %}true{% else %}false{% endif %}"
+                  aria-controls="collapseRequestOverview">
+                  Request Overview
+                </button>
               </h2>
 
               <div
                 id="collapseRequestOverview"
-                class="accordion-collapse show"
-                aria-labelledby="headingRequestOverview">
+                class="accordion-collapse collapse {% if request_overview_open %}show{% endif %}"
+                aria-labelledby="headingRequestOverview"
+                data-bs-parent="#requestOverviewAccordion">
 
                 <div class="accordion-body pt-3">
 
@@ -82,7 +80,7 @@
                     <div class="col-md-4">
                       <label class="form-label">Change Ticket Reference</label>
                       <input
-                        class="form-control form-control-sm"
+                        class="form-control form-control-sm {% if 'change_ticket_ref' in missing_required_fields %}is-invalid{% endif %}"
                         name="change_ticket_ref"
                         id="changeTicketRef"
                         placeholder="ex: Jira-ID 12345"
@@ -95,7 +93,12 @@
                     <div class="col-md-4">
                       <label class="form-label">Change Category</label>
                       <div id="changeCategoryWrap" data-orig="{{ form.change_category.value|default:''|escape }}">
-                        {{ form.change_category }}
+                        <select name="change_category"
+                                class="form-select form-select-sm {% if 'change_category' in missing_required_fields %}is-invalid{% endif %}">
+                          {% for v, lbl in form.fields.change_category.choices %}
+                            <option value="{{ v }}" {% if form.change_category.value == v %}selected{% endif %}>{{ lbl }}</option>
+                          {% endfor %}
+                        </select>
                       </div>
                     </div>
 
@@ -140,7 +143,7 @@
                     <div class="col-12">
                       <label class="form-label">Change Reason</label>
                       <textarea
-                        class="form-control form-control-sm"
+                        class="form-control form-control-sm {% if 'change_reason' in missing_required_fields %}is-invalid{% endif %}"
                         name="change_reason"
                         id="changeReason"
                         placeholder="Explain the reason for this change request..."
@@ -210,7 +213,17 @@
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1" style="width:44px;"></th>
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-2">Row Type</th>
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-3">Operation</th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-4">Update Row Id</th>
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-4">
+                    Change Comment
+                    <button
+                      type="button"
+                      class="btn btn-link btn-sm p-0 ms-1 text-muted mdu-info"
+                      data-bs-toggle="tooltip"
+                      data-bs-title="Optional. Add context for reviewers. Not used by loaders."
+                      aria-label="More info">
+                      i
+                    </button>
+                  </th>
 
                   {% for c in visible_cols %}
                     <th class="text-nowrap py-1 px-3">
@@ -252,8 +265,9 @@
                     <td class="text-nowrap mdu-sticky-col mdu-sticky-col-2">{{ r.row_type|default:"" }}</td>
 
                     <!-- Operation (UI label, derived; never editable) -->
-                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-3">
-                      <input class="form-control form-control-sm"
+                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-3 mdu-op-col">
+                      <input class="form-control form-control-sm text-start {% if r.operation|default:''|upper == 'RETIRE ROW' %}text-danger{% endif %}"
+                            style="min-width: 10rem;"
                             id="opLabel-{{ row_index }}"
                             value="{% if r.row_type|lower == 'header' %}—{% endif %}"
                             readonly>
@@ -263,13 +277,25 @@
                             value="{{ r.operation|default:''|upper }}">
                     </td>
 
-                    <!-- Update Row Id (system-owned; readonly so it updates visually) -->
+                    <!-- Update Row ID is system-owned (hidden). UI shows Change Comment instead. -->
                     <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-4">
-                      <input class="form-control form-control-sm"
+                      <input type="hidden"
                             id="updateRowId-{{ row_index }}"
                             name="update_rowid__{{ row_index }}"
-                            value="{{ r.update_rowid|default:'' }}"
-                            readonly>
+                            value="{{ r.update_rowid|default:'' }}">
+
+                      {% if r.row_type|lower == 'header' %}
+                        <input class="form-control form-control-sm" value="—" readonly>
+                      {% else %}
+                        <textarea
+                          class="form-control form-control-sm business-cell change-comment-cell"
+                          id="changeComment-{{ row_index }}"
+                          name="change_comment__{{ row_index }}"
+                          rows="1"
+                          data-row-index="{{ row_index }}"
+                          data-orig="{{ r.change_comment|default:''|escape }}"
+                        >{{ r.change_comment|default:''|escape }}</textarea>
+                      {% endif %}
                     </td>
 
                     {% for c in visible_cols %}
@@ -334,15 +360,17 @@
 
               {% if editing %}
               {# Progressive affordance: only enable submit after at least one save (editing screen) #}
-              <button class="btn btn-primary" type="button" id="submitBtn" disabled
-                      data-bs-toggle="modal" data-bs-target="#submitConfirmModal">
-                Submit For Approval
-              </button>
+              <span id="submitBtnWrap" class="d-inline-block">
+                <button class="btn btn-primary" type="button" id="submitBtn" disabled
+                        data-bs-toggle="modal" data-bs-target="#submitConfirmModal">
+                  Submit For Approval
+                </button>
+              </span>
               {% endif %}
 
             </div>
 
-            <div class="small text-muted mt-1" id="submitHelp">
+            <div class="small text-muted mt-1 {% if missing_required_fields %}{% else %}d-none{% endif %}" id="submitHelp">
               Complete required fields to submit.
             </div>
           

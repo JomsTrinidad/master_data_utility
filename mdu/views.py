@@ -6,7 +6,7 @@ from django.utils.safestring import mark_safe
 from django.http import FileResponse, Http404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.urls import reverse
 from django.db import IntegrityError
 from datetime import timedelta, date
@@ -235,20 +235,187 @@ def header_detail(request, pk):
 
 @group_required("maker", "steward", "approver")
 def proposed_change_list(request):
-    qs = ChangeRequest.objects.select_related("header").order_by("-created_at")
-    f = ProposedChangeFilter(request.GET, queryset=qs)
-    table = ProposedChangeTable(f.qs)
-    RequestConfig(request, paginate={"per_page": 15}).configure(table)
+    """Unified list view optimized for:
+    - Drafts (with drift detection + bulk delete for drifted)
+    - Pending submissions
+    - Decisioned history
+
+    This intentionally avoids mixing Drafts with Decisioned to reduce confusion.
+    """
+    q = (request.GET.get("q") or "").strip()
+
+    base = ChangeRequest.objects.select_related("header", "created_by").order_by("-updated_at", "-id")
+    if q:
+        base = base.filter(Q(display_id__icontains=q) | Q(header__ref_name__icontains=q))
+
+    my = base.filter(created_by=request.user)
+
+    drafts = list(my.filter(status=ChangeRequest.Status.DRAFT))
+    submitted = list(my.filter(status=ChangeRequest.Status.SUBMITTED))
+    decisioned = list(my.filter(status__in=[ChangeRequest.Status.APPROVED, ChangeRequest.Status.REJECTED]))
+
+    # Drift detection ("baseline changed")
+    # - Prefer version compare when available
+    # - Fall back to payload fingerprint compare when versions are unknown
+    header_cache: dict[int, dict[str, str | int | None]] = {}
+    drifted_ids: set[int] = set()
+
+    for d in drafts:
+        h = d.header
+        if h.pk not in header_cache:
+            baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(h)
+            header_cache[h.pk] = {
+                "baseline_version": baseline_version_latest,
+                "baseline_fp": _normalized_payload_fingerprint(baseline_payload_latest),
+            }
+        info = header_cache[h.pk]
+        baseline_version_latest = info.get("baseline_version")
+        baseline_fp_latest = info.get("baseline_fp")
+
+        aligned = False
+        if d.version is not None and baseline_version_latest is not None:
+            aligned = (d.version == baseline_version_latest)
+        else:
+            aligned = (_normalized_payload_fingerprint(d.payload_json or "") == baseline_fp_latest)
+
+        if not aligned:
+            drifted_ids.add(d.pk)
+
+    breadcrumbs = [
+        _crumb("Catalog", reverse("mdu:catalog")),
+        _crumb("My Proposed Changes", None),
+    ]
+
     return render(request, "mdu/proposed_change_list.html", {
-        "filter": f,
-        "table": table,
-        "breadcrumbs": [
-            _crumb("Catalog", reverse("mdu:catalog")),
-            _crumb("Proposed Changes", None),
-        ],
-        **_role_flags(request.user)
+        "q": q,
+        "drafts": drafts,
+        "submitted": submitted,
+        "decisioned": decisioned,
+        "drifted_ids": drifted_ids,
+        "breadcrumbs": breadcrumbs,
+        **_role_flags(request.user),
     })
 
+
+@require_POST
+@group_required("maker")
+def draft_bulk_delete(request):
+    """Bulk delete drifted drafts without opening each one.
+
+    Rules:
+    - Only DRAFTs created_by the current user
+    - Only those that are no longer aligned to the latest approved baseline
+    """
+    raw_ids = request.POST.getlist("draft_ids")
+    try:
+        ids = [int(x) for x in raw_ids]
+    except Exception:
+        ids = []
+
+    if not ids:
+        messages.info(request, "No drafts were selected.")
+        return redirect("mdu:proposed_change_list")
+
+    qs = ChangeRequest.objects.select_related("header").filter(
+        pk__in=ids,
+        status=ChangeRequest.Status.DRAFT,
+        created_by=request.user,
+    )
+
+    deleted = 0
+    for d in qs:
+        baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(d.header)
+        baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
+
+        aligned = False
+        if d.version is not None and baseline_version_latest is not None:
+            aligned = (d.version == baseline_version_latest)
+        else:
+            aligned = (_normalized_payload_fingerprint(d.payload_json or "") == baseline_fp_latest)
+
+        if aligned:
+            continue
+
+        d.delete()
+        deleted += 1
+
+    if deleted:
+        messages.success(request, f"Deleted {deleted} drifted draft(s).")
+    else:
+        messages.info(request, "No drifted drafts were deleted.")
+
+    return redirect("mdu:proposed_change_list")
+
+
+@group_required("approver", "business_owner")
+def my_approvals(request):
+    """Approver inbox: show only items awaiting a decision."""
+
+    def _ops_and_totals(payload_json: str) -> tuple[int, str]:
+        """Return (total_rows_affected, change_category) derived from payload operations."""
+        try:
+            obj = json.loads(payload_json or "{}")
+        except Exception:
+            obj = {}
+        rows = obj.get("rows", [])
+        if not isinstance(rows, list):
+            rows = []
+
+        ops = {
+            "INSERT ROW": 0,
+            "UPDATE ROW": 0,
+            "RETIRE ROW": 0,
+            "UNRETIRE ROW": 0,
+        }
+
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            if (r.get("row_type") or "").lower() == "header":
+                continue
+            op = (r.get("operation") or "").strip().upper()
+            op = _normalize_operation(op)
+            if op in ops:
+                ops[op] += 1
+
+        total = sum(ops.values())
+
+        nonzero = [k for k, v in ops.items() if v]
+        if not nonzero:
+            category = "No Data Change"
+        elif len(nonzero) == 1:
+            category = nonzero[0].replace(" ROW", "").title()
+        else:
+            category = "Mixed Data Change"
+
+        return total, category
+
+    qs = (
+        ChangeRequest.objects
+        .select_related("header", "created_by")
+        .filter(status=ChangeRequest.Status.SUBMITTED)
+        .order_by("submitted_at", "-updated_at", "-id")
+    )
+
+    items = []
+    for ch in qs:
+        total_rows, category = _ops_and_totals(ch.payload_json)
+        requested_by_sid = ch.requested_by_sid or (ch.created_by.username if ch.created_by else "")
+        items.append({
+            "ch": ch,
+            "category": category,
+            "requested_by_sid": requested_by_sid or "—",
+            "total_rows": total_rows,
+        })
+
+    return render(request, "mdu/my_approvals.html", {
+        "items": items,
+        "breadcrumbs": [
+            _crumb("Catalog", reverse("mdu:catalog")),
+            _crumb("My Approvals", None),
+        ],
+        **_role_flags(request.user),
+    })
 
 def _next_display_id():
     year = timezone.now().strftime("%Y")
@@ -486,7 +653,7 @@ def propose_change(request, header_pk):
                     )
 
                 # Open baseline editor (NO SAVE)
-                initial_payload = baseline_payload_latest
+                initial_payload = _normalize_payload_operations(baseline_payload_latest)
                 baseline_payload_json = initial_payload
                 dirty_cells = {}
                 request_overview_open = True
@@ -529,7 +696,7 @@ def propose_change(request, header_pk):
 
             if action == "create_new":
                 # Open baseline editor (NO SAVE)
-                initial_payload = baseline_payload_latest
+                initial_payload = _normalize_payload_operations(baseline_payload_latest)
                 baseline_payload_json = initial_payload
                 dirty_cells = {}
                 request_overview_open = True
@@ -980,22 +1147,198 @@ def proposed_change_discard(request, pk):
 @group_required("maker", "steward", "approver")
 def proposed_change_detail(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
+
+    # --- UI toggles (server-driven) ---
+    view_mode = (request.GET.get("view") or "changes").lower()
+    show_changes_only = view_mode != "all"
+
+    diff_format = (request.GET.get("format") or "diff").lower()
+    if diff_format not in ("diff", "clean"):
+        diff_format = "diff"
+
+    # --- Proposed rows (after) ---
     rows = payload_rows(ch.payload_json)
     biz_cols = derive_business_columns(rows) if rows else []
-    can_edit = (ch.status == ChangeRequest.Status.DRAFT) and in_group(request.user, "maker")
-    can_decide = (ch.status == ChangeRequest.Status.SUBMITTED) and in_group(request.user, "approver")
+
+    # --- Baseline rows (before) ---
+    def _rows_from_payload(payload_json: str):
+        try:
+            obj = json.loads(payload_json or "{}")
+        except Exception:
+            obj = {}
+        r = obj.get("rows", [])
+        return r if isinstance(r, list) else []
+
+    header = ch.header
+    before_payload = ""
+    latest = getattr(header, "last_approved_change", None)
+
+    if latest and latest.pk != ch.pk:
+        before_payload = latest.payload_json or ""
+    else:
+        prev = (
+            header.changes
+            .filter(status=ChangeRequest.Status.APPROVED)
+            .exclude(pk=ch.pk)
+            .order_by("-version", "-decided_at", "-id")
+            .first()
+        )
+        before_payload = (prev.payload_json if prev else "") or ""
+
+    before_rows = _rows_from_payload(before_payload)
+    after_rows = _rows_from_payload(ch.payload_json)
+
+    # --- Diff rows (baseline vs proposed), business columns only ---
+    def _header_row(rows_list):
+        return next((r for r in rows_list if (r.get("row_type") or "").lower() == "header"), {}) or {}
+
+    def _is_values_row(r):
+        return (r.get("row_type") or "").lower() != "header"
+
+    def _build_biz_cols(before_rows_list, after_rows_list):
+        after_hdr = _header_row(after_rows_list)
+        before_hdr = _header_row(before_rows_list)
+        string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+
+        def used(col):
+            if (after_hdr.get(col) or "").strip() or (before_hdr.get(col) or "").strip():
+                return True
+            for r in after_rows_list:
+                if (r.get(col) or "").strip():
+                    return True
+            for r in before_rows_list:
+                if (r.get(col) or "").strip():
+                    return True
+            return False
+
+        cols = []
+        for col in string_cols:
+            if not used(col):
+                continue
+            biz = (after_hdr.get(col) or "").strip() or (before_hdr.get(col) or "").strip() or col
+            cols.append({"tech": col, "biz": biz})
+        return cols
+
+    diff_cols = _build_biz_cols(before_rows, after_rows)
+    before_vals = [r for r in before_rows if isinstance(r, dict) and _is_values_row(r)]
+    after_vals = [r for r in after_rows if isinstance(r, dict) and _is_values_row(r)]
+
+    # Effective dating columns are relevant for non-snapshot references.
+    show_effective_dates = (header.mode or "").lower() != "snapshot"
+
+    max_len = max(len(before_vals), len(after_vals)) if (before_vals or after_vals) else 0
+    diff_rows_all = []
+    changes_count = 0
+    for i in range(max_len):
+        b = before_vals[i] if i < len(before_vals) else {}
+        a = after_vals[i] if i < len(after_vals) else {}
+
+        op = _normalize_operation((a.get("operation") or "").strip())
+        if not op:
+            # Defensive: treat missing op as KEEP
+            op = "KEEP ROW"
+
+        row_type = (a.get("row_type") or "values")
+        start_dt = (a.get("start_dt") or "")
+        end_dt = (a.get("end_dt") or "")
+
+        is_insert = (op == "INSERT ROW")
+
+        cells = []
+        row_changed = False
+        for col in diff_cols:
+            tech = col["tech"]
+            bv = (b.get(tech) or "").strip()
+            av = (a.get(tech) or "").strip()
+            changed = (bv != av)
+            if changed:
+                row_changed = True
+            cells.append({"before": bv, "after": av, "changed": changed})
+
+        # Operation changes matter even when values are identical.
+        op_is_change = op in {"UPDATE ROW", "INSERT ROW", "RETIRE ROW", "UNRETIRE ROW"}
+        row_effective_changed = row_changed or op_is_change
+
+        row_entry = {
+            "row_type": row_type,
+            "operation": op,
+            "start_dt": start_dt,
+            "end_dt": end_dt,
+            "is_insert": is_insert,
+            "change_comment": (a.get("change_comment") or ""),
+            "cells": cells,
+            "row_changed": row_effective_changed,
+        }
+        diff_rows_all.append(row_entry)
+        if row_effective_changed:
+            changes_count += 1
+
+    # Row filter toggle counts
+    view_counts = {
+        "all": len(diff_rows_all),
+        "changes": changes_count,
+    }
+
+    diff_rows = diff_rows_all
+    if show_changes_only:
+        diff_rows = [r for r in diff_rows_all if r.get("row_changed")]
+
+    # --- Drift-aware edit button ---
+    can_decide = (ch.status == ChangeRequest.Status.SUBMITTED) and (
+        in_group(request.user, "approver") or in_group(request.user, "business_owner")
+    )
+
+    can_edit = False
+    if (ch.status == ChangeRequest.Status.DRAFT) and in_group(request.user, "maker"):
+        baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
+        baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
+        if ch.version is not None and baseline_version_latest is not None:
+            can_edit = (ch.version == baseline_version_latest)
+        else:
+            can_edit = (_normalized_payload_fingerprint(ch.payload_json or "") == baseline_fp_latest)
+
+    # Change summary (values rows only)
+    def _op(r):
+        return _normalize_operation((r.get("operation") or "").strip())
+
+    started_total = len(before_vals)
+
+    added = sum(1 for r in after_vals if _op(r) in {"INSERT ROW", "UNRETIRE ROW"})
+    updated = sum(1 for r in after_vals if _op(r) == "UPDATE ROW")
+    deleted = sum(1 for r in after_vals if _op(r) == "RETIRE ROW")
+    unchanged = sum(1 for r in after_vals if _op(r) in {"KEEP ROW", ""})
+
+    once_approved_total = unchanged + updated + added + deleted
 
     return render(request, "mdu/proposed_change_detail.html", {
         "ch": ch,
+        "change_category_label": ch.get_change_category_display(),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
-            _crumb("Proposed Changes", reverse("mdu:proposed_change_list")),
-            _crumb(ch.display_id, None),
+            _crumb("My Proposed Changes", reverse("mdu:proposed_change_list")),
+            _crumb(header.ref_name, None),
         ],
         "rows": rows,
         "biz_cols": biz_cols,
         "can_edit": can_edit,
         "can_decide": can_decide,
+        "diff_cols": diff_cols,
+        "diff_rows": diff_rows,
+        "view_counts": view_counts,
+        "before_exists": bool(before_rows),
+        "show_changes_only": show_changes_only,
+        "view_mode": "all" if not show_changes_only else "changes",
+        "diff_format": diff_format,
+        "view_counts": view_counts,
+        "show_effective_dates": show_effective_dates,
+        "change_summary": {
+            "started_total": started_total,
+            "once_approved_total": once_approved_total,
+            "unchanged": unchanged,
+            "updated": updated,
+            "added": added,
+            "deleted": deleted,
+        },
         **_role_flags(request.user)
     })
 @group_required("maker")
@@ -1008,20 +1351,28 @@ def proposed_change_edit(request, pk):
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     header = ch.header
-    # If this draft is for an older baseline/version, force read-only view.
-    # (DRAFTs may exist for older versions; they are viewable but not editable.)
-    latest_version = None
-    if header.last_approved_change:
-        latest_version = header.last_approved_change.version
+    # If this draft is no longer aligned to the latest approved baseline, force read-only view.
+    # (Users may keep it for reference, but must discard & recreate to submit.)
+    baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
+    baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
 
-    if ch.version is not None and latest_version is not None and ch.version != latest_version:
+    aligned = False
+    if ch.version is not None and baseline_version_latest is not None:
+        aligned = (ch.version == baseline_version_latest)
+    else:
+        aligned = (_normalized_payload_fingerprint(ch.payload_json or "") == baseline_fp_latest)
+
+    if not aligned:
         messages.error(
             request,
-            f"This draft is for an older version of {header.ref_name}. It is viewable, but cannot be edited."
+            f"The approved data for {header.ref_name} has changed since this draft was created. This draft is view-only. Discard it and create a new draft to submit."
         )
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
 
+
+    # If a submit attempt failed validation, surface missing required fields on the next render
+    missing_required_fields = request.session.pop("mdu_missing_required_fields", None)
 
     dirty_cells = {}
     baseline_payload_json = ""
@@ -1044,13 +1395,24 @@ def proposed_change_edit(request, pk):
 
         form = ProposedChangeForm(instance=ch)
 
-        # Render the DRAFT payload (not the baseline)
-        payload = ch.payload_json or baseline_payload_json
-        rows = payload_rows(payload)
+        # UX guardrail: do not default Change Category to the placeholder choice.
+        # If the model currently has NONE/blank, pick the first non-NONE choice.
+        try:
+            cur = (form["change_category"].value() or "").strip()
+            if not cur or cur.upper() == "NONE":
+                for v, _lbl in form.fields["change_category"].choices:
+                    vv = (v or "").strip()
+                    if vv and vv.upper() != "NONE":
+                        form.initial["change_category"] = vv
+                        break
+        except Exception:
+            pass
 
+        # Render the DRAFT payload (not the baseline)
+        payload = _normalize_payload_operations(ch.payload_json or baseline_payload_json)
+        rows = payload_rows(payload)
         # Dirty cells must be computed on GET so highlighting survives reload/redirect
         dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
-
 
     else:
         post = request.POST.copy()
@@ -1071,6 +1433,8 @@ def proposed_change_edit(request, pk):
             post.get("payload_json", ""),
             post
         )
+
+        post["payload_json"] = _normalize_payload_operations(post["payload_json"])
 
         _lock_meta_fields_for_maker(post, user=request.user, existing=ch)
 
@@ -1330,6 +1694,7 @@ def proposed_change_edit(request, pk):
         "editing": True,
         "ch": ch,
         "change": ch,  # keep template compatibility if it expects 'change'
+        "missing_required_fields": missing_required_fields or [],
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -1383,6 +1748,47 @@ def proposed_change_submit(request, pk):
         )
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
+    # -----------------------------
+    # Required fields (server-side)
+    # -----------------------------
+    missing: list[str] = []
+    if not (ch.change_ticket_ref or "").strip():
+        missing.append("change_ticket_ref")
+    if not (ch.change_reason or "").strip():
+        missing.append("change_reason")
+
+    # Category cannot be NONE/blank at submit time
+    cat = (ch.change_category or "").strip()
+    if not cat or cat.upper() == "NONE":
+        missing.append("change_category")
+
+    # Must contain at least one real data change
+    try:
+        obj = json.loads(ch.payload_json or "{}")
+    except Exception:
+        obj = {}
+    rows = obj.get("rows", []) if isinstance(obj.get("rows", []), list) else []
+
+    change_ops = {"INSERT ROW", "UPDATE ROW", "RETIRE ROW", "UNRETIRE ROW"}
+    has_change = False
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        if (r.get("row_type") or "").lower() != "values":
+            continue
+        op = (r.get("operation") or "").strip().upper()
+        if op in change_ops:
+            has_change = True
+            break
+
+    if not has_change:
+        missing.append("payload_json")
+
+    if missing:
+        request.session["mdu_missing_required_fields"] = missing
+        messages.error(request, "Please complete the required fields before submitting.")
+        return redirect("mdu:proposed_change_edit", pk=ch.pk)
+
 
     ch.status = ChangeRequest.Status.SUBMITTED
     ch.submitted_at = timezone.now()
@@ -1394,25 +1800,24 @@ def proposed_change_submit(request, pk):
     messages.success(request, "Submitted for approval.")
     return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
-
-
-
-
-
-@group_required("approver")
 @require_POST
+@group_required("approver", "business_owner")
 def proposed_change_decide(request, pk, decision):
     ch = get_object_or_404(ChangeRequest, pk=pk)
     if ch.status != ChangeRequest.Status.SUBMITTED:
         raise Http404()
 
     note = (request.POST.get("note") or "").strip()
+    if not note:
+        messages.error(request, "A decision comment is required.")
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     if decision == "approve":
         ch.status = ChangeRequest.Status.APPROVED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
+        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
+        ch.save(update_fields=["status","decided_at","decision_note","decided_by_sid","updated_at"])
 
         header = ch.header
         header.last_approved_change = ch
@@ -1424,16 +1829,17 @@ def proposed_change_decide(request, pk, decision):
         ch.status = ChangeRequest.Status.REJECTED
         ch.decided_at = timezone.now()
         ch.decision_note = note
-        ch.save(update_fields=["status","decided_at","decision_note","updated_at"])
+        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
+        ch.save(update_fields=["status","decided_at","decision_note","decided_by_sid","updated_at"])
         messages.info(request, "Rejected.")
 
     else:
         raise Http404()
 
-    return redirect("mdu:proposed_change_detail", pk=ch.pk)
+    return redirect("mdu:my_approvals")
 
 
-@group_required("approver")
+@group_required("approver", "business_owner")
 def generate_load_files(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
     if ch.status != ChangeRequest.Status.APPROVED:
@@ -1490,6 +1896,58 @@ def _safe_rows(payload_json: str):
         return []
 
 
+def _normalize_operation(op: str) -> str:
+    """
+    Normalize all operation values to LOCKED UI/Audit labels.
+    """
+    s = (op or "").strip().upper()
+
+    # Legacy mappings (do not allow these to persist)
+    if s == "INSERT":
+        return "INSERT ROW"
+    if s == "UPDATE":
+        return "UPDATE ROW"
+    if s in ("DELETE", "REMOVE"):
+        return "RETIRE ROW"
+    if s in ("RETAIN", ""):
+        return "KEEP ROW"
+
+    # Already correct (LOCKED)
+    if s in ("INSERT ROW", "UPDATE ROW", "KEEP ROW", "RETIRE ROW", "UNRETIRE ROW"):
+        return s
+
+    # Unknown -> default safe behavior for VALUES rows
+    return "KEEP ROW"
+
+
+def _normalize_payload_operations(payload_json: str) -> str:
+    """
+    Ensure every VALUES row has a valid LOCKED operation label.
+    Header rows are left untouched.
+    """
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        obj = {}
+
+    rows = obj.get("rows", [])
+    if not isinstance(rows, list):
+        rows = []
+
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+
+        row_type = (r.get("row_type") or "").strip().lower()
+        if row_type != "values":
+            continue
+
+        r["operation"] = _normalize_operation(r.get("operation", ""))
+
+    obj["rows"] = rows
+    return json.dumps(obj, indent=2)
+
+
 def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
     """
     Takes existing payload_json and applies:
@@ -1499,6 +1957,8 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
          op__<row_index> = "" | "KEEP ROW" | "UPDATE ROW" | "INSERT ROW" | "RETIRE ROW" | "UNRETIRE ROW"
          update_rowid__<row_index> = <hash>
          row_delete__<row_index> = "0" | "1"  (UI toggle; persisted by op/update_rowid)
+      3) optional reviewer context:
+         change_comment__<row_index> = <text>
 
     Returns updated payload_json string.
     """
@@ -1568,6 +2028,28 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
                 continue
             if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
                 rows[idx]["update_rowid"] = (val or "").strip()
+            continue
+
+        # change_comment__<idx> (optional, user-facing)
+        if key.startswith("change_comment__"):
+            try:
+                _, idx_str = key.split("__", 1)
+                idx = int(idx_str)
+            except Exception:
+                continue
+            if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
+                rows[idx]["change_comment"] = (val or "").strip()
+            continue
+
+        # change_comment__<idx> (optional)
+        if key.startswith("change_comment__"):
+            try:
+                _, idx_str = key.split("__", 1)
+                idx = int(idx_str)
+            except Exception:
+                continue
+            if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
+                rows[idx]["change_comment"] = (val or "").strip()
             continue
 
         # row_delete__<idx> is UI-facing; operation drives the loader meaning

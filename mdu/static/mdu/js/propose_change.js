@@ -145,6 +145,100 @@
     baselineUpdateIds = {};
   }
 
+  // ----------------------------------------------------
+  // Submit gating (mirrors server-side rules)
+  // ----------------------------------------------------
+  const submitBtn = $("submitBtn");
+  const submitBtnWrap = $("submitBtnWrap");
+  const submitHelp = $("submitHelp");
+
+  const changeTicketRef = $("changeTicketRef");
+  const changeReason = $("changeReason");
+  const changeCategory = document.querySelector('select[name="change_category"]');
+
+  const CHANGE_OPS = new Set(["INSERT ROW", "UPDATE ROW", "RETIRE ROW", "UNRETIRE ROW"]);
+
+  function _norm(v) {
+    return (v == null ? "" : String(v)).trim();
+  }
+
+  function hasAnyChangeOp() {
+    const opInputs = document.querySelectorAll('input[id^="opCode-"]');
+    for (const el of opInputs) {
+      const v = _norm(el.value).toUpperCase();
+      if (CHANGE_OPS.has(v)) return true;
+    }
+    return false;
+  }
+
+  function computeMissingRequired() {
+    const missing = [];
+    if (changeTicketRef && !_norm(changeTicketRef.value)) missing.push("change_ticket_ref");
+    if (changeReason && !_norm(changeReason.value)) missing.push("change_reason");
+
+    const cat = changeCategory ? _norm(changeCategory.value).toUpperCase() : "";
+    if (!cat || cat === "NONE") missing.push("change_category");
+
+    if (!hasAnyChangeOp()) missing.push("payload_json");
+    return missing;
+  }
+
+  function setInvalid(el, on) {
+    if (!el) return;
+    el.classList.toggle("is-invalid", !!on);
+  }
+
+  function showSubmitMissing(missing) {
+    // Show helper text and highlight the fields.
+    if (submitHelp) submitHelp.classList.remove("d-none");
+
+    setInvalid(changeTicketRef, missing.includes("change_ticket_ref"));
+    setInvalid(changeReason, missing.includes("change_reason"));
+    setInvalid(changeCategory, missing.includes("change_category"));
+
+    if (missing.includes("payload_json")) {
+      // Guide the user to the table if they haven't made any row changes yet.
+      const tableAnchor = document.querySelector("#proposedDataTableWrap") || document.querySelector("#proposedDataWrap") || document.querySelector("table");
+      if (tableAnchor) tableAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      const overview = document.querySelector("#requestOverviewAccordion") || document.querySelector("#headingRequestOverview");
+      if (overview) overview.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function updateSubmitState() {
+    if (!submitBtn) return;
+    const missing = computeMissingRequired();
+    const ready = missing.length === 0;
+    submitBtn.disabled = !ready;
+
+    // Do not spam the helper text while typing; only show when already visible (server-side attempt)
+    // or when the user clicks the disabled submit area.
+    if (submitHelp && !ready && submitHelp.classList.contains("d-none")) {
+      setInvalid(changeTicketRef, false);
+      setInvalid(changeReason, false);
+      setInvalid(changeCategory, false);
+    }
+  }
+
+  // Allow the user to click the disabled submit button wrapper to see what is missing.
+  if (submitBtnWrap) {
+    submitBtnWrap.addEventListener("click", function () {
+      if (!submitBtn || !submitBtn.disabled) return;
+      showSubmitMissing(computeMissingRequired());
+    });
+  }
+
+  // Do not let Change Category sit on a placeholder.
+  if (changeCategory) {
+    const cur = _norm(changeCategory.value).toUpperCase();
+    if (!cur || cur === "NONE") {
+      const opts = Array.from(changeCategory.options || []);
+      const firstReal = opts.find(o => _norm(o.value) && _norm(o.value).toUpperCase() !== "NONE");
+      if (firstReal) changeCategory.value = firstReal.value;
+    }
+  }
+
   function baselineValue(rowIndex, col) {
     const r = baselineRows[rowIndex];
     if (!r) return null; // new row not in baseline
@@ -183,6 +277,20 @@
       if (isDirty) input.classList.add("mdu-dirty");
       else input.classList.remove("mdu-dirty");
     }
+
+    // Change comments are part of the draft and should also participate in dirty highlighting.
+    const comments = document.querySelectorAll("textarea.change-comment-cell, input.change-comment-cell");
+    for (const el of comments) {
+      const rowIndex = parseInt(el.getAttribute("data-row-index") || "", 10);
+      if (Number.isNaN(rowIndex)) continue;
+      const orig = (el.getAttribute("data-orig") ?? "");
+      const now = (el.value ?? "");
+      const isDirty = (now.trim() !== String(orig).trim());
+      if (isDirty) el.classList.add("mdu-dirty");
+      else el.classList.remove("mdu-dirty");
+    }
+
+    updateSubmitState();
   }
 
   // ---------- Row intent derivation + delete/undo ----------
@@ -197,6 +305,14 @@
     const opCode = document.getElementById(`opCode-${rowIndex}`);
     if (opLabel) opLabel.value = label || "";
     if (opCode) opCode.value = code || "";
+
+    // Visual cue: only RETIRE ROW shows red operation text
+    if (opLabel) {
+      const isRetire = (String(code || "").toUpperCase() === "RETIRE ROW");
+      opLabel.classList.toggle("text-danger", isRetire);
+    }
+
+    updateSubmitState();
   }
 
   function setUpdateRowId(rowIndex, val) {
@@ -255,6 +371,7 @@
 
     const btn = row.querySelector(`.mdu-row-toggle-delete[data-row-index="${rowIndex}"]`);
     const inputs = row.querySelectorAll("input.business-cell");
+    const comment = document.getElementById(`changeComment-${rowIndex}`);
 
     if (on) {
       // snapshot current edits for undo
@@ -274,8 +391,12 @@
         i.classList.remove("mdu-dirty");
       }
 
+
       row.classList.add("mdu-row-deleted");
       row.classList.add("mdu-row-locked");
+
+      // Change comment remains editable for RETIRE ROW
+      if (comment) comment.readOnly = false;
       if (btn) {
         btn.innerHTML  = undoIcon(); //"↩";
         btn.setAttribute("aria-label", "Undo Retire");
@@ -291,8 +412,22 @@
         i.readOnly = false;
       }
 
+      const cc = document.getElementById(`changeComment-${rowIndex}`);
+      if (cc) cc.readOnly = false;
+
+      // Remove Operation red unless it becomes RETIRE again via deriveRowIntent
+      const opLabel = document.getElementById(`opLabel-${rowIndex}`);
+      if (opLabel) opLabel.classList.remove("text-danger");
+
       row.classList.remove("mdu-row-deleted");
       row.classList.remove("mdu-row-locked");
+
+      if (comment) comment.readOnly = false;
+
+      if (comment) {
+        comment.readOnly = false;
+        comment.classList.remove("text-danger");
+      }
 
       const del = document.getElementById(`rowDelete-${rowIndex}`);
       if (del) del.value = "0";
@@ -325,7 +460,15 @@
     const catOrig = wrap ? (wrap.getAttribute("data-orig") ?? "") : "";
     const catChanged = select ? ((select.value ?? "") !== catOrig) : false;
 
-    return changed(reason) || changed(ticket) || catChanged;
+    // Any change comment edits should also enable Save Draft
+    let commentChanged = false;
+    const comments = document.querySelectorAll("textarea.change-comment-cell, input.change-comment-cell");
+    for (const el of comments) {
+      const orig = (el.getAttribute("data-orig") ?? "");
+      if ((el.value ?? "") !== orig) { commentChanged = true; break; }
+    }
+
+    return changed(reason) || changed(ticket) || catChanged || commentChanged;
   }
 
   function updateSaveDraftState() {
@@ -348,16 +491,26 @@
       recomputeAllDirty();
       if (!Number.isNaN(rowIndex)) deriveRowIntent(rowIndex);
       updateSaveDraftState();
+      updateSubmitState();
+      return;
+    }
+
+    if (el.classList && el.classList.contains("change-comment-cell")) {
+      recomputeAllDirty();
+      updateSaveDraftState();
+      updateSubmitState();
       return;
     }
 
     if (el.id === "changeReason" || el.id === "changeTicketRef") {
       updateSaveDraftState();
+      updateSubmitState();
       return;
     }
 
     if (el.tagName === "SELECT" && el.closest("#changeCategoryWrap")) {
       updateSaveDraftState();
+      updateSubmitState();
       return;
     }
   });

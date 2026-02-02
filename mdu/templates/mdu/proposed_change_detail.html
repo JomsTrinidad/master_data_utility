@@ -1,17 +1,20 @@
 {% extends "base.html" %}
 {% load mdu_extras %}
-{% block title %}{{ ch.display_id }}{% endblock %}
+{% block title %}{{ ch.header.ref_name }}{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-3">
   <div>
     <div class="text-muted small">Proposed change</div>
-    <h3 class="mb-1">{{ ch.display_id }}</h3>
+    <h3 class="mb-1">{{ ch.header.ref_name }}</h3>
     <div class="text-muted">
       Reference: <a href="{% url 'mdu:header_detail' pk=ch.header.pk %}">{{ ch.header.ref_name }}</a>
       · Status: <span class="badge text-bg-light border">{{ ch.get_status_display }}</span>
+      {% if ch.submitted_at %} · Submitted: {{ ch.submitted_at|date:"Y-m-d H:i" }}{% endif %}
+      {% if ch.decided_at %} · Decided: {{ ch.decided_at|date:"Y-m-d H:i" }}{% endif %}
     </div>
   </div>
   <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'mdu:proposed_change_list' %}">Go Back</a>
     {% if can_edit %}
       <a class="btn btn-outline-primary" href="{% url 'mdu:proposed_change_edit' pk=ch.pk %}">Edit</a>
       <form method="post" action="{% url 'mdu:proposed_change_submit' pk=ch.pk %}">
@@ -26,23 +29,97 @@
 
 <div class="row g-3">
   <div class="col-lg-4">
+
+    <!-- Change Summary -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="fw-semibold">Change Summary</div>
+          <button
+            type="button"
+            class="btn btn-link btn-sm p-0 text-muted mdu-info"
+            data-bs-toggle="tooltip"
+            data-bs-title="Counts are derived from row intent (KEEP/UPDATE/INSERT/RETIRE/UNRETIRE)."
+            aria-label="More info">i</button>
+        </div>
+
+        <div class="mt-3">
+          <div class="d-flex justify-content-between py-1">
+            <div class="text-muted">Total Rows Started</div>
+            <div class="fw-semibold">{{ change_summary.started_total }}</div>
+          </div>
+
+          <div class="d-flex justify-content-between py-1">
+            <div class="text-muted">Total Rows Once Approved</div>
+            <div class="fw-semibold">{{ change_summary.once_approved_total }}</div>
+          </div>
+
+          <div class="ms-3">
+            <div class="d-flex justify-content-between py-1">
+              <div class="text-muted">Unchanged</div>
+              <div class="fw-semibold">{{ change_summary.unchanged }}</div>
+            </div>
+            <div class="d-flex justify-content-between py-1">
+              <div class="text-muted">Updated</div>
+              <div class="fw-semibold">{{ change_summary.updated }}</div>
+            </div>
+            <div class="d-flex justify-content-between py-1">
+              <div class="text-muted">Added</div>
+              <div class="fw-semibold">{{ change_summary.added }}</div>
+            </div>
+            <div class="d-flex justify-content-between py-1">
+              <div class="text-muted">Deleted</div>
+              <div class="fw-semibold">{{ change_summary.deleted }}</div>
+            </div>
+          </div>
+        </div>
+
+        {% with affected=change_summary.updated|add:change_summary.added|add:change_summary.deleted %}
+          {% if affected|add:0 > 0 %}
+            <div class="alert alert-warning py-2 mt-3 mb-0" role="alert">
+              <div class="fw-semibold">Changes Detected</div>
+              {{ affected }} row{% if affected|add:0 != 1 %}s{% endif %} will be updated when submitted
+            </div>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="text-muted small">Why this change exists</div>
         <div class="mt-2">
-          <div><span class="text-muted">Reason:</span> {{ ch.change_reason|default:"—" }}</div>
-          <div><span class="text-muted">Ticket:</span> {{ ch.change_ticket_ref|default:"—" }}</div>
-          <div><span class="text-muted">Category:</span> {{ ch.change_category|default:"—" }}</div>
-          <div><span class="text-muted">Risk:</span> {{ ch.risk_impact|default:"—" }}</div>
-          <div><span class="text-muted">Source:</span> {{ ch.request_source_channel|default:"—" }} / {{ ch.request_source_system|default:"—" }}</div>
-        </div>
-        <hr>
-        <details>
-          <summary class="text-muted">Details</summary>
-          <div class="mt-2 small">
-            <div><span class="text-muted">Tracking:</span> <span class="mono">{{ ch.tracking_id|default:"—" }}</span></div>
+          <div class="d-flex justify-content-between align-items-center py-1">
+            <div class="text-muted">Change Tracking ID</div>
+            <div class="mono fw-semibold">{{ ch.tracking_id|default:"—" }}</div>
           </div>
-        </details>
+          <div class="d-flex justify-content-between align-items-center py-1">
+            <div class="text-muted">Change Ticket Reference</div>
+            <div class="fw-semibold">{{ ch.change_ticket_ref|default:"—" }}</div>
+          </div>
+          <div class="d-flex justify-content-between align-items-center py-1">
+            <div class="text-muted">Category</div>
+            <div class="fw-semibold">{{ change_category_label|default:"—" }}</div>
+          </div>
+          <div class="mt-2">
+            <div class="text-muted">Change Reason</div>
+            <div class="border rounded bg-light p-2 mdu-freeform">{{ ch.change_reason|default:"—"|linebreaksbr }}</div>
+          </div>
+        </div>
+
+        {% if ch.decided_at %}
+          <hr>
+          <div class="text-muted small">Decision</div>
+          <div class="mt-2">
+            <div><span class="text-muted">Final Status:</span> {{ ch.get_status_display }}</div>
+            <div><span class="text-muted">Decided At:</span> {{ ch.decided_at|date:"Y-m-d H:i" }}</div>
+            <div><span class="text-muted">Decided By:</span> {{ ch.decided_by_sid|default:"—" }}</div>
+            <div class="mt-2">
+              <div class="text-muted">Comment</div>
+              <div class="border rounded p-2 bg-light">{{ ch.decision_note|default:"—"|linebreaksbr }}</div>
+            </div>
+          </div>
+        {% endif %}
       </div>
     </div>
 
@@ -52,12 +129,12 @@
         <div class="text-muted small mb-2">Approval</div>
         <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='approve' %}" class="mb-2">
           {% csrf_token %}
-          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Optional note (kept for audit)"></textarea>
+          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Decision comment (required)" required></textarea>
           <button class="btn btn-success w-100" type="submit">Approve</button>
         </form>
         <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='reject' %}">
           {% csrf_token %}
-          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Optional reason"></textarea>
+          <textarea name="note" rows="2" class="form-control mb-2" placeholder="Decision comment (required)" required></textarea>
           <button class="btn btn-outline-danger w-100" type="submit">Reject</button>
         </form>
       </div>
@@ -76,50 +153,145 @@
   </div>
 
   <div class="col-lg-8">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="text-muted">Proposed data</div>
-          {% if ch.status == 'DRAFT' %}
-            <span class="badge text-bg-light border">Not yet submitted</span>
-          {% endif %}
-        </div>
+    {% if diff_cols and diff_rows %}
+      <div class="card shadow-sm mt-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <div class="text-muted">Approved Vs Proposed</div>
+              <div class="text-muted small">Compare latest approved data vs the proposed values.</div>
+            </div>
+            <div>
+              <div class="d-flex flex-wrap gap-2 justify-content-end align-items-center">
+                <div class="text-muted small">View:</div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Row filter">
+                  <a class="btn {% if view_mode == 'all' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+                     href="?view=all&format={{ diff_format }}">All Rows ({{ view_counts.all }})</a>
+                  <a class="btn {% if view_mode == 'changes' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+                     href="?view=changes&format={{ diff_format }}">Changes Only ({{ view_counts.changes }})</a>
+                </div>
 
-        {% if rows %}
-          <div class="table-responsive">
-            <table class="table table-sm table-striped align-middle table-sticky">
-              <thead>
-                <tr>
-                  <th class="text-nowrap">Row type</th>
-                  <th class="text-nowrap">Operation</th>
-                  <th class="text-nowrap">Start</th>
-                  <th class="text-nowrap">End</th>
-                  {% for key,label in biz_cols %}
-                    <th class="text-nowrap">{{ label }}</th>
-                  {% endfor %}
-                </tr>
-              </thead>
-              <tbody>
-                {% for r in rows %}
-                  <tr>
-                    <td class="text-nowrap">{% if r.row_type %}{{ r.row_type|capfirst }}{% else %}Value{% endif %}</td>
-                    <td class="text-nowrap">{{ r.operation|default:"" }}</td>
-                    <td class="text-nowrap">{{ r.start_dt|default:"" }}</td>
-                    <td class="text-nowrap">{{ r.end_dt|default:"" }}</td>
-                    {% for key,label in biz_cols %}
-                      <td class="text-nowrap">{{ r|get_item:key }}</td>
-                    {% endfor %}
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+                <a class="btn btn-sm btn-outline-secondary" href="?view={{ view_mode }}&format={% if diff_format == 'diff' %}clean{% else %}diff{% endif %}">
+                  {% if diff_format == 'diff' %}
+                    <span class="me-1" aria-hidden="true">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M4 4l16 16" stroke="currentColor" stroke-width="1.8"/>
+                      </svg>
+                    </span>
+                    Hide Differences
+                  {% else %}
+                    <span class="me-1" aria-hidden="true">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.8"/>
+                      </svg>
+                    </span>
+                    Show Differences
+                  {% endif %}
+                </a>
+
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0 ms-1 text-muted mdu-info"
+                  data-bs-toggle="tooltip"
+                  data-bs-title="Use View to switch between all rows and changed rows. Use Show/Hide Differences to toggle old vs new values." 
+                  aria-label="More info">i</button>
+              </div>
+            </div>
           </div>
-        {% else %}
-          <div class="text-muted">No rows found in the proposed data.</div>
+
+          <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle">
+  <thead>
+    <tr>
+      <th class="text-nowrap">Row Type</th>
+      <th class="text-nowrap">Operation</th>
+      <th class="text-nowrap">Change Comment</th>
+      {% if show_effective_dates %}
+        <th class="text-nowrap">Start</th>
+        <th class="text-nowrap">End</th>
+      {% endif %}
+      {% for c in diff_cols %}
+        <th class="text-nowrap">
+          <div class="text-muted small mdu-tech-col">{{ c.tech }}</div>
+          <div class="fw-semibold">{{ c.biz }}</div>
+        </th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in diff_rows %}
+      <tr>
+        <td class="text-nowrap text-muted small">{{ r.row_type }}</td>
+        <td class="text-nowrap text-start">
+          <span class="badge text-bg-light border fw-normal text-start d-inline-block mdu-op-badge {% if r.operation == 'RETIRE ROW' %}text-danger border-danger{% endif %}">{{ r.operation }}</span>
+        </td>
+        <td class="text-nowrap">
+          {% if r.change_comment %}
+            <span
+              class="d-inline-block text-truncate"
+              style="max-width: 240px;"
+              data-bs-toggle="tooltip"
+              data-bs-title="{{ r.change_comment|escape }}"
+            >{{ r.change_comment }}</span>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        {% if show_effective_dates %}
+          <td class="text-nowrap">{{ r.start_dt|default:"" }}</td>
+          <td class="text-nowrap">{{ r.end_dt|default:"" }}</td>
         {% endif %}
 
+        {% for cell in r.cells %}
+          <td class="text-nowrap {% if cell.changed %}table-warning{% endif %}">
+            {% if diff_format == 'diff' %}
+              {% if cell.changed %}
+                {% if r.is_insert %}
+                  <div class="mdu-after">{{ cell.after|default:"—" }}</div>
+                {% else %}
+                  {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                    <div class="text-muted">{{ cell.after|default:"—" }}</div>
+                  {% else %}
+                    <div class="mdu-before">{{ cell.before|default:"—" }}</div>
+                    <div class="mdu-after">{{ cell.after|default:"—" }}</div>
+                  {% endif %}
+                {% endif %}
+              {% else %}
+                {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                  <span class="text-muted">{{ cell.after|default:"" }}</span>
+                {% else %}
+                  {{ cell.after|default:"" }}
+                {% endif %}
+              {% endif %}
+            {% else %}
+              {# clean proposed-only #}
+              {% if cell.changed %}
+                {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                  <div class="text-muted">{{ cell.after|default:"—" }}</div>
+                {% else %}
+                  <div class="mdu-after">{{ cell.after|default:"—" }}</div>
+                {% endif %}
+              {% else %}
+                {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                  <span class="text-muted">{{ cell.after|default:"" }}</span>
+                {% else %}
+                  {{ cell.after|default:"" }}
+                {% endif %}
+              {% endif %}
+            {% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+          </div>
+        </div>
       </div>
-    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

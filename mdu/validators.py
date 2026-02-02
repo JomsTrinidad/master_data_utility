@@ -57,6 +57,59 @@ def validate_change_request_payload(*, header, change_request) -> Tuple[List[str
 
     hdr = header_rows[0]
 
+        # ------------------------------------------------------------
+    # LOCKED Operation Labels (values rows only)
+    # ------------------------------------------------------------
+    ALLOWED_VALUE_OPS = {
+        "INSERT ROW",
+        "UPDATE ROW",
+        "KEEP ROW",
+        "RETIRE ROW",
+        "UNRETIRE ROW",
+    }
+
+    # Common legacy labels we want to block hard (helpful error message)
+    LEGACY_OPS = {
+        "INSERT",
+        "UPDATE",
+        "KEEP",
+        "RETAIN",
+        "DELETE",
+        "REMOVE",
+        "UNDELETE",
+        "UNRETIRE",
+        "RETIRE",
+        "REPLACE",
+    }
+
+    for idx, vr in enumerate(value_rows, start=1):
+        op_raw = (vr.get("operation") or "").strip()
+        op = op_raw.upper()
+
+        # KEEP ROW must be explicit; blank op is not allowed.
+        if not op:
+            errors.append(
+                f"Values row {idx} is missing an Operation. "
+                "Set it to one of: INSERT ROW, UPDATE ROW, KEEP ROW, RETIRE ROW, UNRETIRE ROW."
+            )
+            continue
+
+        # Block legacy verbs with a targeted message
+        if op in LEGACY_OPS and op not in ALLOWED_VALUE_OPS:
+            errors.append(
+                f"Values row {idx} has an unsupported Operation '{op_raw}'. "
+                "Use only: INSERT ROW, UPDATE ROW, KEEP ROW, RETIRE ROW, UNRETIRE ROW."
+            )
+            continue
+
+        # Block anything else not in the locked set
+        if op not in ALLOWED_VALUE_OPS:
+            errors.append(
+                f"Values row {idx} has an invalid Operation '{op_raw}'. "
+                "Use only: INSERT ROW, UPDATE ROW, KEEP ROW, RETIRE ROW, UNRETIRE ROW."
+            )
+
+
     # Loader alignment: rowid must never be present
     for r in rows:
         if isinstance(r, dict) and r.get("rowid"):

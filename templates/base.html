@@ -1,4 +1,5 @@
 {% load static %}
+{% load mdu_extras %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -35,9 +36,16 @@
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item"><a class="nav-link" href="{% url 'mdu:catalog' %}">Catalog</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:proposed_change_list' %}">Proposed Changes</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:cert_list' %}">Certifications</a></li>
-          {% if request.user.is_staff %}
+          {% if not request.user|in_group:"approver" and not request.user|in_group:"business_owner" %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:proposed_change_list' %}">My Proposed Changes</a></li>
+          {% endif %}
+          {% if request.user|in_group:"approver" or request.user|in_group:"business_owner" %}
+            <li class="nav-item"><a class="nav-link" href="{% url 'mdu:my_approvals' %}">My Approvals</a></li>
+          {% endif %}
+          {% if request.user|in_group:"steward" or request.user|in_group:"approver" or request.user|in_group:"business_owner" %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:cert_list' %}">My Certifications</a></li>
+          {% endif %}
+{% if request.user.is_staff %}
             <li class="nav-item"><a class="nav-link" href="/admin/">Admin</a></li>
           {% endif %}
         </ul>
@@ -114,6 +122,12 @@
       e.preventDefault();
       const href = tr.getAttribute('data-href');
       if (href) window.location.href = href;
+    });
+
+    // Bootstrap tooltips (used by small "i" info buttons)
+    document.addEventListener('DOMContentLoaded', function () {
+      const els = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      els.forEach(function (el) { new bootstrap.Tooltip(el); });
     });
   </script>
 
