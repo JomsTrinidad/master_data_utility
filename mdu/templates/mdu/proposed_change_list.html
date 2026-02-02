@@ -47,7 +47,11 @@
                 <th style="width: 1px;"></th>
                 <th class="text-nowrap">Display ID</th>
                 <th class="text-nowrap">Reference</th>
+                <th class="text-nowrap">Reference Type</th>
+                <th class="text-nowrap">Author</th>
+                <th class="text-nowrap">Collaborator Sign-Off</th>
                 <th class="text-nowrap">Validity</th>
+                <th class="text-nowrap">Created At</th>
                 <th class="text-nowrap">Updated At</th>
               </tr>
             </thead>
@@ -69,10 +73,18 @@
 
                     <td class="text-nowrap">
                       <div class="fw-semibold">{{ d.display_id }}</div>
-                      <div class="text-muted small">Created {{ d.created_at|date:"Y-m-d" }}</div>
+                      {% if d.created_by and d.created_by != user %}
+                        <div class="text-muted small">Shared draft · Created by {{ d.created_by.username }}</div>
+                      {% endif %}
                     </td>
 
                     <td class="text-nowrap">{{ d.header.ref_name }}</td>
+
+                    <td class="text-nowrap">{{ d.ref_kind_label }}</td>
+
+                    <td class="text-nowrap">{{ d.author_label }}</td>
+
+                    <td class="text-nowrap">{{ d.maker2_status_label }}</td>
 
                     <td class="text-nowrap">
                       {% if d.pk in drifted_ids %}
@@ -84,9 +96,11 @@
                       {% endif %}
                     </td>
 
+                    <td class="text-nowrap">{{ d.created_at|date:"Y-m-d H:i" }}</td>
+
                     <td class="text-nowrap">{{ d.updated_at|date:"Y-m-d H:i" }}</td>
                   </tr>
-              {% endfor %}
+{% endfor %}
             </tbody>
           </table>
         </div>
@@ -116,6 +130,9 @@
             <tr>
               <th class="text-nowrap">Display ID</th>
               <th class="text-nowrap">Reference</th>
+                <th class="text-nowrap">Reference Type</th>
+                <th class="text-nowrap">Author</th>
+                <th class="text-nowrap">Collaborator Sign-Off</th>
               <th class="text-nowrap">Submitted At</th>
             </tr>
           </thead>
@@ -126,9 +143,12 @@
                   <div class="fw-semibold">{{ s.display_id }}</div>
                 </td>
                 <td class="text-nowrap">{{ s.header.ref_name }}</td>
+                <td class="text-nowrap">{{ s.ref_kind_label }}</td>
+                <td class="text-nowrap">{{ s.author_label }}</td>
+                <td class="text-nowrap">{{ s.maker2_status_label }}</td>
                 <td class="text-nowrap">{{ s.submitted_at|date:"Y-m-d H:i"|default:"—" }}</td>
               </tr>
-            {% endfor %}
+{% endfor %}
           </tbody>
         </table>
       </div>
@@ -152,6 +172,9 @@
             <tr>
               <th class="text-nowrap">Display ID</th>
               <th class="text-nowrap">Reference</th>
+                <th class="text-nowrap">Reference Type</th>
+                <th class="text-nowrap">Author</th>
+                <th class="text-nowrap">Collaborator Sign-Off</th>
               <th class="text-nowrap">Final Status</th>
               <th class="text-nowrap">Decided At</th>
             </tr>
@@ -163,6 +186,9 @@
                   <div class="fw-semibold">{{ d.display_id }}</div>
                 </td>
                 <td class="text-nowrap">{{ d.header.ref_name }}</td>
+                <td class="text-nowrap">{{ d.ref_kind_label }}</td>
+                <td class="text-nowrap">{{ d.author_label }}</td>
+                <td class="text-nowrap">{{ d.maker2_status_label }}</td>
                 <td class="text-nowrap">
                   {% if d.status == 'APPROVED' %}
                     <span class="badge text-bg-success">Approved</span>
@@ -174,7 +200,7 @@
                 </td>
                 <td class="text-nowrap">{{ d.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
               </tr>
-            {% endfor %}
+{% endfor %}
           </tbody>
         </table>
       </div>

@@ -33,6 +33,87 @@ def _role_flags(user):
         "is_approver": in_group(user, "approver"),
     }
 
+def _ref_kind_label(header: MDUHeader) -> str:
+    """
+    UI label for reference kind/type.
+    Uses collaboration_mode if present; falls back safely.
+    """
+    mode = (getattr(header, "collaboration_mode", "") or "").upper()
+    if mode == "COLLABORATIVE":
+        return "Collab"
+    if mode == "SINGLE_OWNER":
+        return "Standard"
+    # fallback for unexpected/legacy values
+    return mode.title() if mode else "Standard"
+
+
+def _collab_touched_by_set(payload_json_or_obj) -> set[str]:
+    """
+    Best-effort extraction of "touched by" usernames from payload.
+    This is intentionally defensive because payload structure may vary.
+
+    Returns a set of usernames/sids found in any known touch/author fields on rows.
+    If none exist, returns empty set (which results in 'Waiting' in the list).
+    """
+    obj = None
+
+    if isinstance(payload_json_or_obj, dict):
+        obj = payload_json_or_obj
+    elif isinstance(payload_json_or_obj, str):
+        try:
+            obj = json.loads(payload_json_or_obj or "{}")
+        except Exception:
+            obj = {}
+    else:
+        obj = {}
+
+    rows = obj.get("rows", [])
+    if not isinstance(rows, list):
+        rows = []
+
+    # Common fields we’ve seen across payload variants (safe to scan)
+    touch_keys = (
+        "touched_by",
+        "touched_by_sid",
+        "edited_by",
+        "edited_by_sid",
+        "last_edited_by",
+        "last_edited_by_sid",
+        "created_by",
+        "created_by_sid",
+        "maker_sid",
+        "author",
+        "author_sid",
+    )
+
+    touched: set[str] = set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        for k in touch_keys:
+            v = (r.get(k) or "").strip()
+            if v:
+                touched.add(v)
+
+    return touched
+
+
+def _get_maker2_user():
+    """
+    Returns a single 'maker2' user if that group exists and has members.
+    This avoids guessing a username.
+    If no such group/user exists, returns None.
+    """
+    try:
+        grp = Group.objects.filter(name="maker2").first()
+        if not grp:
+            return None
+        User = get_user_model()
+        return User.objects.filter(groups=grp).order_by("username").first()
+    except Exception:
+        return None
+
+
 @login_required
 def catalog(request):
     qs = MDUHeader.objects.all().order_by("ref_name")
@@ -248,11 +329,20 @@ def proposed_change_list(request):
     if q:
         base = base.filter(Q(display_id__icontains=q) | Q(header__ref_name__icontains=q))
 
-    my = base.filter(created_by=request.user)
+    # In collaborative mode, a user may work on a draft they did not create.
+    # Keep the list "mine" by including:
+    # - changes I created
+    # - collaborative drafts where I am an explicit contributor
+    my = base.filter(Q(created_by=request.user) | Q(contributors=request.user)).distinct()
 
     drafts = list(my.filter(status=ChangeRequest.Status.DRAFT))
-    submitted = list(my.filter(status=ChangeRequest.Status.SUBMITTED))
-    decisioned = list(my.filter(status__in=[ChangeRequest.Status.APPROVED, ChangeRequest.Status.REJECTED]))
+    submitted = list(my.filter(status=ChangeRequest.Status.SUBMITTED, created_by=request.user))
+    decisioned = list(
+        my.filter(
+            status__in=[ChangeRequest.Status.APPROVED, ChangeRequest.Status.REJECTED],
+            created_by=request.user,
+        )
+    )
 
     # Drift detection ("baseline changed")
     # - Prefer version compare when available
@@ -285,6 +375,24 @@ def proposed_change_list(request):
         _crumb("Catalog", reverse("mdu:catalog")),
         _crumb("My Proposed Changes", None),
     ]
+
+    # Attach lightweight UI labels (no model changes)
+    maker2 = _get_maker2_user()
+    maker2_name = getattr(maker2, "username", None)
+
+    def _decorate(ch):
+        ch.ref_kind_label = _ref_kind_label(ch.header)
+        ch.author_label = getattr(ch.created_by, "username", "") or ""
+        if getattr(ch.header, "collaboration_mode", "").upper() == "COLLABORATIVE" and maker2_name:
+            touched = _collab_touched_by_set(ch.payload_json or {})
+            ch.maker2_status_label = "Complete" if maker2_name in touched else "Waiting"
+        else:
+            ch.maker2_status_label = "—"
+        return ch
+
+    drafts = [_decorate(c) for c in drafts]
+    submitted = [_decorate(c) for c in submitted]
+    decisioned = [_decorate(c) for c in decisioned]
 
     return render(request, "mdu/proposed_change_list.html", {
         "q": q,
@@ -587,12 +695,23 @@ def propose_change(request, header_pk):
     baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
     baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
 
-    # Draft picker: maker-only drafts for this reference
-    drafts_qs = (
-        header.changes
-        .filter(status=ChangeRequest.Status.DRAFT, created_by=request.user)
-        .order_by("-updated_at", "-id")
-    )
+    # Draft picker
+    # - Single-owner: only the current user's drafts
+    # - Collaborative: include drafts shared with the current user
+    if header.collaboration_mode == "COLLABORATIVE":
+        drafts_qs = (
+            header.changes
+            .filter(status=ChangeRequest.Status.DRAFT)
+            .filter(Q(created_by=request.user) | Q(contributors=request.user))
+            .distinct()
+            .order_by("-updated_at", "-id")
+        )
+    else:
+        drafts_qs = (
+            header.changes
+            .filter(status=ChangeRequest.Status.DRAFT, created_by=request.user)
+            .order_by("-updated_at", "-id")
+        )
 
     def _draft_is_aligned(d: ChangeRequest) -> bool:
         # Prefer version compare when both are known
@@ -1227,8 +1346,7 @@ def proposed_change_detail(request, pk):
     show_effective_dates = (header.mode or "").lower() != "snapshot"
 
     max_len = max(len(before_vals), len(after_vals)) if (before_vals or after_vals) else 0
-    diff_rows_all = []
-    changes_count = 0
+    diff_rows = []
     for i in range(max_len):
         b = before_vals[i] if i < len(before_vals) else {}
         a = after_vals[i] if i < len(after_vals) else {}
@@ -1259,29 +1377,23 @@ def proposed_change_detail(request, pk):
         op_is_change = op in {"UPDATE ROW", "INSERT ROW", "RETIRE ROW", "UNRETIRE ROW"}
         row_effective_changed = row_changed or op_is_change
 
-        row_entry = {
+        diff_rows.append({
             "row_type": row_type,
             "operation": op,
             "start_dt": start_dt,
             "end_dt": end_dt,
             "is_insert": is_insert,
-            "change_comment": (a.get("change_comment") or ""),
+            "change_comment": (a.get("change_comment") or "").strip(),
             "cells": cells,
             "row_changed": row_effective_changed,
-        }
-        diff_rows_all.append(row_entry)
-        if row_effective_changed:
-            changes_count += 1
+        })
 
-    # Row filter toggle counts
-    view_counts = {
-        "all": len(diff_rows_all),
-        "changes": changes_count,
-    }
+    # Counts for View toggles (must be server-derived)
+    all_count = len(after_vals)
+    changes_count = sum(1 for r in diff_rows if r.get("row_changed"))
 
-    diff_rows = diff_rows_all
     if show_changes_only:
-        diff_rows = [r for r in diff_rows_all if r.get("row_changed")]
+        diff_rows = [r for r in diff_rows if r.get("row_changed")]
 
     # --- Drift-aware edit button ---
     can_decide = (ch.status == ChangeRequest.Status.SUBMITTED) and (
@@ -1312,11 +1424,10 @@ def proposed_change_detail(request, pk):
 
     return render(request, "mdu/proposed_change_detail.html", {
         "ch": ch,
-        "change_category_label": ch.get_change_category_display(),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb("My Proposed Changes", reverse("mdu:proposed_change_list")),
-            _crumb(header.ref_name, None),
+            _crumb(ch.display_id, None),
         ],
         "rows": rows,
         "biz_cols": biz_cols,
@@ -1324,12 +1435,11 @@ def proposed_change_detail(request, pk):
         "can_decide": can_decide,
         "diff_cols": diff_cols,
         "diff_rows": diff_rows,
-        "view_counts": view_counts,
         "before_exists": bool(before_rows),
         "show_changes_only": show_changes_only,
         "view_mode": "all" if not show_changes_only else "changes",
+        "view_counts": {"all": all_count, "changes": changes_count},
         "diff_format": diff_format,
-        "view_counts": view_counts,
         "show_effective_dates": show_effective_dates,
         "change_summary": {
             "started_total": started_total,
@@ -1345,6 +1455,18 @@ def proposed_change_detail(request, pk):
 def proposed_change_edit(request, pk):
     
     ch = get_object_or_404(ChangeRequest, pk=pk)
+
+    # Collaborative drafts can be edited by explicit contributors (and the creator).
+    # Single-owner drafts remain restricted to the creator.
+    if ch.header.collaboration_mode == "COLLABORATIVE":
+        is_collab_editor = (ch.created_by_id == request.user.id) or ch.contributors.filter(pk=request.user.pk).exists()
+        if not is_collab_editor:
+            messages.error(request, "This draft is not shared with you.")
+            return redirect("mdu:proposed_change_detail", pk=ch.pk)
+    else:
+        if ch.created_by_id != request.user.id:
+            messages.error(request, "Only the creator of this draft can edit it.")
+            return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     if ch.status != ChangeRequest.Status.DRAFT:
         messages.error(request, "Only drafts can be edited.")
@@ -1371,9 +1493,6 @@ def proposed_change_edit(request, pk):
 
 
 
-    # If a submit attempt failed validation, surface missing required fields on the next render
-    missing_required_fields = request.session.pop("mdu_missing_required_fields", None)
-
     dirty_cells = {}
     baseline_payload_json = ""
 
@@ -1394,19 +1513,6 @@ def proposed_change_edit(request, pk):
         )
 
         form = ProposedChangeForm(instance=ch)
-
-        # UX guardrail: do not default Change Category to the placeholder choice.
-        # If the model currently has NONE/blank, pick the first non-NONE choice.
-        try:
-            cur = (form["change_category"].value() or "").strip()
-            if not cur or cur.upper() == "NONE":
-                for v, _lbl in form.fields["change_category"].choices:
-                    vv = (v or "").strip()
-                    if vv and vv.upper() != "NONE":
-                        form.initial["change_category"] = vv
-                        break
-        except Exception:
-            pass
 
         # Render the DRAFT payload (not the baseline)
         payload = _normalize_payload_operations(ch.payload_json or baseline_payload_json)
@@ -1641,6 +1747,11 @@ def proposed_change_edit(request, pk):
                     "updated_at",
                 ])
 
+                # Collaborative mode: ensure the editor is recorded as a contributor.
+                if ch2.header.collaboration_mode == "COLLABORATIVE":
+                    if request.user.is_authenticated:
+                        ch2.contributors.add(request.user)
+
 
 
                 # Link to the list screen (adjust URL name if your project uses a different one)
@@ -1694,7 +1805,6 @@ def proposed_change_edit(request, pk):
         "editing": True,
         "ch": ch,
         "change": ch,  # keep template compatibility if it expects 'change'
-        "missing_required_fields": missing_required_fields or [],
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -1747,47 +1857,6 @@ def proposed_change_submit(request, pk):
             "This draft was updated in another window. Please reload the page before submitting."
         )
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
-
-    # -----------------------------
-    # Required fields (server-side)
-    # -----------------------------
-    missing: list[str] = []
-    if not (ch.change_ticket_ref or "").strip():
-        missing.append("change_ticket_ref")
-    if not (ch.change_reason or "").strip():
-        missing.append("change_reason")
-
-    # Category cannot be NONE/blank at submit time
-    cat = (ch.change_category or "").strip()
-    if not cat or cat.upper() == "NONE":
-        missing.append("change_category")
-
-    # Must contain at least one real data change
-    try:
-        obj = json.loads(ch.payload_json or "{}")
-    except Exception:
-        obj = {}
-    rows = obj.get("rows", []) if isinstance(obj.get("rows", []), list) else []
-
-    change_ops = {"INSERT ROW", "UPDATE ROW", "RETIRE ROW", "UNRETIRE ROW"}
-    has_change = False
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        if (r.get("row_type") or "").lower() != "values":
-            continue
-        op = (r.get("operation") or "").strip().upper()
-        if op in change_ops:
-            has_change = True
-            break
-
-    if not has_change:
-        missing.append("payload_json")
-
-    if missing:
-        request.session["mdu_missing_required_fields"] = missing
-        messages.error(request, "Please complete the required fields before submitting.")
-        return redirect("mdu:proposed_change_edit", pk=ch.pk)
 
 
     ch.status = ChangeRequest.Status.SUBMITTED

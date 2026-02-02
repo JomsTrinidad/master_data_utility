@@ -448,8 +448,8 @@ tr.mdu-row-deleted .mdu-row-toggle-delete:hover {
 
 .mdu-tech-col { opacity: 0.55; }
 
-/* Operation badge: readable but not shouty; uniform width */
-.mdu-op-badge {
-  display: inline-block;
-  min-width: 120px;
+
+.mdu-retire-value {
+  color: rgba(108, 117, 125, 0.90);
+  text-decoration: line-through;
 }

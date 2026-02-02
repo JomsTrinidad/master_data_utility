@@ -288,7 +288,7 @@
                         <input class="form-control form-control-sm" value="—" readonly>
                       {% else %}
                         <textarea
-                          class="form-control form-control-sm business-cell change-comment-cell"
+                          class="form-control form-control-sm business-cell change-comment-cell {% if dirty_cells|get_item:row_index|get_item:'change_comment' %}mdu-dirty{% endif %}"
                           id="changeComment-{{ row_index }}"
                           name="change_comment__{{ row_index }}"
                           rows="1"

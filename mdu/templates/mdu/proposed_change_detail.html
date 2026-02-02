@@ -166,9 +166,9 @@
                 <div class="text-muted small">View:</div>
                 <div class="btn-group btn-group-sm" role="group" aria-label="Row filter">
                   <a class="btn {% if view_mode == 'all' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
-                     href="?view=all&format={{ diff_format }}">All Rows ({{ view_counts.all }})</a>
+                     href="?view=all&format={{ diff_format }}">All Rows ({{ view_counts.all|default:0 }})</a>
                   <a class="btn {% if view_mode == 'changes' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
-                     href="?view=changes&format={{ diff_format }}">Changes Only ({{ view_counts.changes }})</a>
+                     href="?view=changes&format={{ diff_format }}">Changes Only ({{ view_counts.changes|default:0 }})</a>
                 </div>
 
                 <a class="btn btn-sm btn-outline-secondary" href="?view={{ view_mode }}&format={% if diff_format == 'diff' %}clean{% else %}diff{% endif %}">
@@ -237,7 +237,6 @@
               data-bs-title="{{ r.change_comment|escape }}"
             >{{ r.change_comment }}</span>
           {% else %}
-            <span class="text-muted">—</span>
           {% endif %}
         </td>
         {% if show_effective_dates %}
@@ -253,7 +252,7 @@
                   <div class="mdu-after">{{ cell.after|default:"—" }}</div>
                 {% else %}
                   {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
-                    <div class="text-muted">{{ cell.after|default:"—" }}</div>
+                    <div class="mdu-retire-value">{{ cell.after|default:"" }}</div>
                   {% else %}
                     <div class="mdu-before">{{ cell.before|default:"—" }}</div>
                     <div class="mdu-after">{{ cell.after|default:"—" }}</div>
@@ -261,7 +260,7 @@
                 {% endif %}
               {% else %}
                 {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
-                  <span class="text-muted">{{ cell.after|default:"" }}</span>
+                  <span class="mdu-retire-value">{{ cell.after|default:"" }}</span>
                 {% else %}
                   {{ cell.after|default:"" }}
                 {% endif %}
@@ -276,7 +275,7 @@
                 {% endif %}
               {% else %}
                 {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
-                  <span class="text-muted">{{ cell.after|default:"" }}</span>
+                  <span class="mdu-retire-value">{{ cell.after|default:"" }}</span>
                 {% else %}
                   {{ cell.after|default:"" }}
                 {% endif %}

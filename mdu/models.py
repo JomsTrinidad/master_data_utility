@@ -170,6 +170,14 @@ class ChangeRequest(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_changes"
     )
+
+    # Collaborative mode: allow multiple contributors to work on the same draft.
+    # For SINGLE_OWNER references this remains unused.
+    contributors = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="collab_changes",
+    )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
