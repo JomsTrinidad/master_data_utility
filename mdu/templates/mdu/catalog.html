@@ -31,18 +31,47 @@
 
         <div class="col-12 col-md-2">
           <label class="form-label small text-muted mb-1">Status</label>
-          {{ filter.form.status }}
+          {% with cur=filter.form.status.value %}
+          <select name="status" class="form-select">
+            <option value="" {% if not cur %}selected{% endif %}>All</option>
+            {% for value, label in filter.form.fields.status.choices %}
+              {% if value %}
+                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          {% endwith %}
         </div>
 
         <div class="col-12 col-md-2">
           <label class="form-label small text-muted mb-1">Type</label>
-          {{ filter.form.ref_type }}
+          {% with cur=filter.form.ref_type.value %}
+          <select name="ref_type" class="form-select">
+            <option value="" {% if not cur %}selected{% endif %}>All</option>
+            {% for value, label in filter.form.fields.ref_type.choices %}
+              {% if value %}
+                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          {% endwith %}
         </div>
+
 
         <div class="col-12 col-md-2">
           <label class="form-label small text-muted mb-1">Mode</label>
-          {{ filter.form.mode }}
+          {% with cur=filter.form.mode.value %}
+          <select name="mode" class="form-select">
+            <option value="" {% if not cur %}selected{% endif %}>All</option>
+            {% for value, label in filter.form.fields.mode.choices %}
+              {% if value %}
+                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          {% endwith %}
         </div>
+
 
         <div class="col-12 col-md-2">
           <label class="form-label small text-muted mb-1 d-none d-md-block">&nbsp;</label>

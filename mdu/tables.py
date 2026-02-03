@@ -11,20 +11,20 @@ class HeaderTable(tables.Table):
     description = tables.Column(verbose_name="Description",
         attrs={"td": {"class": "truncate col-desc"},"th": {"class": "col-desc"},},)
     
-    ref_type = tables.Column(verbose_name="Reference Type")
+    ref_type = tables.Column(verbose_name="Type")
     
     mode = tables.Column(verbose_name="Mode")
     
-    status = tables.Column(verbose_name="Status")
+    status = tables.Column(verbose_name="Lifecycle Status")
 
-    pending_review = tables.Column(empty_values=(), verbose_name="Pending Change", accessor="has_pending", order_by=("has_pending",))
-    owner_group = tables.Column(verbose_name="Owner Group")
+    pending_review = tables.Column(empty_values=(), verbose_name="Change Status", accessor="has_pending", order_by=("has_pending",))
+    workflow = tables.Column(empty_values=(), verbose_name="Workflow")
     
     updated_at = tables.DateTimeColumn(verbose_name="Updated At")
 
     class Meta:
         model = MDUHeader
-        fields = ("ref_name", "description", "ref_type", "mode", "status", "pending_review", "owner_group", "updated_at")
+        fields = ("ref_name", "description", "ref_type", "mode", "status", "pending_review", "workflow", "updated_at")
         attrs = {"class": "table table-striped table-hover align-middle"}
         row_attrs = {
             "data-href": lambda record: reverse("mdu:header_detail", kwargs={"pk": record.pk}),
@@ -45,6 +45,15 @@ class HeaderTable(tables.Table):
         if has_pending:
             return format_html('<span class="badge text-bg-warning">In review</span>')
         return ""
+
+    def render_workflow(self, record):
+        mode = (getattr(record, "collaboration_mode", None) or getattr(record, "mode", None) or "").upper()
+        if mode == "COLLABORATIVE":
+            return "Collab"
+        if mode == "SINGLE_OWNER":
+            return "Single"
+        # fallback: treat anything else as Single unless clearly collaborative
+        return "Single"
 
 
     def render_description(self, value):

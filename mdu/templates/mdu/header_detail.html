@@ -160,9 +160,7 @@
                 </div>
 
                 <div class="col-12">
-                  <div class="text-muted small">Owner group</div>
-                  <div class="fw-semibold">{{ header.owner_group|default:"—" }}</div>
-                </div>
+</div>
               </div>
             </div>
           </div>
@@ -332,7 +330,7 @@
                       </td>
 
                       {% for c in visible_cols %}
-                        <td>{{ r|get_item:c }}</td>
+                        <td class="text-nowrap">{{ r|get_item:c }}</td>
                       {% endfor %}
                     </tr>
                   {% endfor %}
