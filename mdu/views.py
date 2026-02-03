@@ -42,7 +42,7 @@ def _ref_kind_label(header: MDUHeader) -> str:
     if mode == "COLLABORATIVE":
         return "Collab"
     if mode == "SINGLE_OWNER":
-        return "Standard"
+        return "Single"
     # fallback for unexpected/legacy values
     return mode.title() if mode else "Standard"
 
