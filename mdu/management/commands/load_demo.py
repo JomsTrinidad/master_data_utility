@@ -93,6 +93,179 @@ def _payload(ref_type: str, width: int, rows: int, mode: str):
     return {"rows": [header_row] + values_rows}
 
 
+
+COUNTRY_CAPITALS = {
+    "AU": "Canberra",
+    "PH": "Manila",
+    "SG": "Singapore",
+    "US": "Washington",
+    "JP": "Tokyo",
+    "GB": "London",
+    "AR": "Buenos Aires",
+    "MX": "Mexico City",
+    "CA": "Ottawa",
+}
+
+COUNTRY_REGION = {
+    "AU": "APAC",
+    "PH": "APAC",
+    "SG": "APAC",
+    "JP": "APAC",
+    "GB": "EMEA",
+    "US": "NAMR",
+    "CA": "NAMR",
+    "AR": "LATAM",
+    "MX": "LATAM",
+}
+
+PAYMENT_TYPE_PREFIXES = ["IR", "RR", "ID", "IC", "XX"]
+PAYMENT_SUB_PREFIXES = ["DL", "IL", "IF"]
+
+PRODUCT_TYPES = [
+    ("Real Time Payments", "RTP"),
+    ("High Value Payments", "HV"),
+    ("Low Value Payments", "LV"),
+    ("Alternative Payments", "Alt"),
+]
+
+HV_CLUSTERS = ["HV_CORE", "HV_INTL", "HV_URGENT"]
+LV_CLUSTERS = ["LV_BULK", "LV_PAYROLL", "LV_RETAIL"]
+
+def _rand_code(prefixes: list[str]) -> str:
+    p = random.choice(prefixes)
+    tail = "".join(random.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for _ in range(2))
+    return f"{p}{tail}"
+
+def _payload_demo_product_mapping(rows: int) -> dict:
+    """Payload for demo_product_mapping (map/snapshot) with fixed columns."""
+    op = "REPLACE"
+
+    labels = [
+        "branch_id",
+        "branch_name",
+        "country",
+        "region",
+        "payment_type",
+        "payment_sub_type",
+        "product_type",
+        "vol_in_scope",
+        "csi_product_group",
+        "csi_product_cluster",
+    ]
+
+    header_row = {"row_type": "header", "operation": op, "start_dt": "", "end_dt": ""}
+    for i in range(1, 66):
+        header_row[f"string_{i:02d}"] = ""
+    for i, label in enumerate(labels, start=1):
+        header_row[f"string_{i:02d}"] = label
+
+    values_rows = []
+    countries = list(COUNTRY_CAPITALS.keys())
+
+    for r in range(rows):
+        cc = random.choice(countries)
+        branch_id = f"{random.randint(100, 999)}"  # stored as text
+        branch_name = COUNTRY_CAPITALS.get(cc, cc)
+        region = COUNTRY_REGION.get(cc, random.choice(["APAC", "EMEA", "LATAM", "NAMR"]))
+
+        product_type, group = random.choice(PRODUCT_TYPES)
+        cluster = ""
+        if group == "HV":
+            cluster = random.choice(HV_CLUSTERS)
+        elif group == "LV":
+            cluster = random.choice(LV_CLUSTERS)
+
+        row = {"row_type": "values", "operation": op, "start_dt": "", "end_dt": ""}
+        for i in range(1, 66):
+            row[f"string_{i:02d}"] = ""
+
+        row["string_01"] = branch_id
+        row["string_02"] = branch_name
+        row["string_03"] = cc
+        row["string_04"] = region
+        row["string_05"] = _rand_code(PAYMENT_TYPE_PREFIXES)
+        row["string_06"] = _rand_code(PAYMENT_SUB_PREFIXES)
+        row["string_07"] = product_type
+        row["string_08"] = str(random.choice([0, 1]))
+        row["string_09"] = group
+        row["string_10"] = cluster
+
+        values_rows.append(row)
+
+    return {"rows": [header_row] + values_rows}
+
+def _payload_demo_client_mailing_list(rows: int) -> dict:
+    """Payload for demo_client_mailing_list (map/snapshot) with fixed columns."""
+    op = "REPLACE"
+
+    labels = [
+        "branch_id",
+        "branch_name",
+        "country",
+        "region",
+        "report",
+        "frequency",
+        "report_format",
+        "distro_type",
+        "client_id",
+        "mail_to",
+        "mail_cc",
+        "mail_bcc",
+    ]
+
+    header_row = {"row_type": "header", "operation": op, "start_dt": "", "end_dt": ""}
+    for i in range(1, 66):
+        header_row[f"string_{i:02d}"] = ""
+    for i, label in enumerate(labels, start=1):
+        header_row[f"string_{i:02d}"] = label
+
+    freqs = ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Ad-hoc"]
+    fmts = ["Standard", "Custom"]
+    reports = [
+        "Client Report Name",
+        "Client Activity Summary",
+        "Client Exception Register",
+        "Client SLA Scorecard",
+        "Client Volume Snapshot",
+    ]
+
+    values_rows = []
+    countries = list(COUNTRY_CAPITALS.keys())
+
+    for _ in range(rows):
+        cc = random.choice(countries)
+        branch_id = f"{random.randint(100, 999)}"  # stored as text
+        branch_name = COUNTRY_CAPITALS.get(cc, cc)
+        region = COUNTRY_REGION.get(cc, random.choice(["APAC", "EMEA", "LATAM", "NAMR"]))
+
+        client_id = f"{random.randint(10**12, (10**13)-1)}"  # 13-digit text
+
+        # Simple, clearly fake emails
+        dom = random.choice(["example.com", "demo.local", "mail.test"])
+        to = f"client{random.randint(1000,9999)}@{dom}"
+        cc_email = f"ops{random.randint(1000,9999)}@{dom}"
+
+        row = {"row_type": "values", "operation": op, "start_dt": "", "end_dt": ""}
+        for i in range(1, 66):
+            row[f"string_{i:02d}"] = ""
+
+        row["string_01"] = branch_id
+        row["string_02"] = branch_name
+        row["string_03"] = cc
+        row["string_04"] = region
+        row["string_05"] = random.choice(reports)
+        row["string_06"] = random.choice(freqs)
+        row["string_07"] = random.choice(fmts)
+        row["string_08"] = "EXTERNAL"
+        row["string_09"] = client_id
+        row["string_10"] = to
+        row["string_11"] = cc_email
+        row["string_12"] = ""  # mail_bcc
+
+        values_rows.append(row)
+
+    return {"rows": [header_row] + values_rows}
+
 class Command(BaseCommand):
     help = "Load realistic demo data for MDU"
 
@@ -180,10 +353,12 @@ class Command(BaseCommand):
             ("demo_routing_map", "map", "snapshot", MDUHeader.Status.RETIRED),
             ("demo_blocked_swift_codes", "list", "snapshot", MDUHeader.Status.ACTIVE),
             ("demo_blacklist_terms", "list", "snapshot", MDUHeader.Status.ACTIVE),
-            ("demo_allowed_channels", "list", "versioning", MDUHeader.Status.PENDING_REVIEW),
+            ("demo_allowed_channels", "list", "versioning", MDUHeader.Status.IN_REVIEW),
             ("demo_ops_exceptions", "list", "versioning", MDUHeader.Status.ACTIVE),
             # Collaborative demo reference
             ("demo_collab_allowlist_terms", "list", "versioning", MDUHeader.Status.ACTIVE),
+            ("demo_product_mapping", "map", "snapshot", MDUHeader.Status.ACTIVE),
+            ("demo_client_mailing_list", "map", "snapshot", MDUHeader.Status.ACTIVE),
             ("demo_list_s_04", "list", "snapshot", MDUHeader.Status.ACTIVE),
         ]
 
@@ -206,7 +381,7 @@ class Command(BaseCommand):
                 status=status,
                 collaboration_mode=(
                     MDUHeader.CollaborationMode.COLLABORATIVE
-                    if ref_name.startswith("demo_collab_")
+                    if (ref_name.startswith("demo_collab_") or ref_name in ("demo_product_mapping", "demo_client_mailing_list"))
                     else MDUHeader.CollaborationMode.SINGLE_OWNER
                 ),
                 owner_group=random.choice(["Payments Ops", "Compliance", "Treasury", "Risk", "Client Service"]),
@@ -217,8 +392,8 @@ class Command(BaseCommand):
 
         pc_counter = 1
         for h, w in headers:
-            row_count = random.randint(12, 40) if h.ref_type == "map" else random.randint(8, 25)
-            payload_base = _payload(h.ref_type, w, row_count, h.mode)
+            row_count = 24 if h.ref_name == "demo_product_mapping" else (18 if h.ref_name == "demo_client_mailing_list" else (random.randint(12, 40) if h.ref_type == "map" else random.randint(8, 25)))
+            payload_base = (_payload_demo_product_mapping(row_count) if h.ref_name == "demo_product_mapping" else (_payload_demo_client_mailing_list(row_count) if h.ref_name == "demo_client_mailing_list" else _payload(h.ref_type, w, row_count, h.mode)))
 
             if h.status in (MDUHeader.Status.ACTIVE, MDUHeader.Status.IN_REVIEW):
                 approved1 = mk_change(
@@ -236,7 +411,7 @@ class Command(BaseCommand):
                 h.save()
 
                 if h.status == MDUHeader.Status.ACTIVE and random.random() < 0.6:
-                    payload_v2 = _payload(h.ref_type, w, row_count, h.mode)
+                    payload_v2 = (_payload_demo_product_mapping(row_count) if h.ref_name == "demo_product_mapping" else (_payload_demo_client_mailing_list(row_count) if h.ref_name == "demo_client_mailing_list" else _payload(h.ref_type, w, row_count, h.mode)))
                     approved2 = mk_change(
                         h,
                         f"PC-2025-{pc_counter:03d}",
@@ -253,7 +428,7 @@ class Command(BaseCommand):
 
                 if h.status == MDUHeader.Status.ACTIVE and h.collaboration_mode == MDUHeader.CollaborationMode.SINGLE_OWNER:
                     if random.random() < 0.6:
-                        payload_sub = _payload(h.ref_type, w, row_count, h.mode)
+                        payload_sub = (_payload_demo_product_mapping(row_count) if h.ref_name == "demo_product_mapping" else (_payload_demo_client_mailing_list(row_count) if h.ref_name == "demo_client_mailing_list" else _payload(h.ref_type, w, row_count, h.mode)))
                         mk_change(
                             h,
                             f"PC-2025-{pc_counter:03d}",
@@ -280,11 +455,61 @@ class Command(BaseCommand):
                 )
                 pc_counter += 1
 
+        
+
+        # Collaborative demo: shared draft for demo_product_mapping
+        pm_header = next((h for h, _ in headers if h.ref_name == "demo_product_mapping"), None)
+        if pm_header:
+            baseline_version = pm_header.last_approved_change.version if pm_header.last_approved_change else None
+            base_payload = json.loads(pm_header.last_approved_change.payload_json) if pm_header.last_approved_change else _payload_demo_product_mapping(24)
+            if isinstance(base_payload, dict):
+                base_payload["meta"] = {"collab_touched_by": ["maker1"]}
+            pm_draft = mk_change(
+                pm_header,
+                f"PC-2026-{pc_counter:03d}",
+                ChangeRequest.Status.DRAFT,
+                creator=maker1,
+                days_ago=1,
+                payload=base_payload,
+                submitted=False,
+                decided=False,
+                version=baseline_version,
+            )
+            pm_draft.contributors.add(maker2)
+            pm_draft.contributors.add(steward1)
+            pc_counter += 1
+
+            
+        # Collaborative demo: shared draft for demo_client_mailing_list
+        ml_header = next((h for h, _ in headers if h.ref_name == "demo_client_mailing_list"), None)
+        if ml_header:
+            baseline_version = ml_header.last_approved_change.version if ml_header.last_approved_change else None
+            base_payload = json.loads(ml_header.last_approved_change.payload_json) if ml_header.last_approved_change else _payload_demo_client_mailing_list(18)
+            # Mark as touched by maker1 only; demo will require maker2 to open + Save Draft before submit
+            if isinstance(base_payload, dict):
+                base_payload["meta"] = {"collab_touched_by": ["maker1"]}
+            ml_draft = mk_change(
+                ml_header,
+                f"PC-2026-{pc_counter:03d}",
+                ChangeRequest.Status.DRAFT,
+                creator=maker1,
+                days_ago=1,
+                payload=base_payload,
+                submitted=False,
+                decided=False,
+                version=baseline_version,
+            )
+            ml_draft.contributors.add(maker2)
+            ml_draft.contributors.add(steward1)
+            pc_counter += 1
+
         # Collaborative demo: shared draft for demo_collab_* reference
         collab_header = next((h for h, _ in headers if h.ref_name.startswith("demo_collab_")), None)
         if collab_header:
             baseline_version = collab_header.last_approved_change.version if collab_header.last_approved_change else None
             base_payload = json.loads(collab_header.last_approved_change.payload_json) if collab_header.last_approved_change else _payload("list", 6, 12, collab_header.mode)
+            if isinstance(base_payload, dict):
+                base_payload["meta"] = {"collab_touched_by": ["maker1"]}
             collab_draft = mk_change(
                 collab_header,
                 f"PC-2026-{pc_counter:03d}",

@@ -14,17 +14,18 @@ class HeaderFilter(django_filters.FilterSet):
     )
 
     status = django_filters.ChoiceFilter(
-        choices=MDUHeader.Status.choices,
+        # UX: dropdown defaults to "All" (blank)
+        choices=[("", "All"), *list(MDUHeader.Status.choices)],
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     ref_type = django_filters.ChoiceFilter(
-        choices=[("map", "Map"), ("list", "List")],
+        choices=[("", "All"), ("map", "Map"), ("list", "List")],
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     mode = django_filters.ChoiceFilter(
-        choices=[("versioning", "Versioning"), ("snapshot", "Snapshot")],
+        choices=[("", "All"), ("versioning", "Versioning"), ("snapshot", "Snapshot")],
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 

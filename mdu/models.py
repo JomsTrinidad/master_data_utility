@@ -8,10 +8,9 @@ from django.utils import timezone
 
 class MDUHeader(models.Model):
     class Status(models.TextChoices):
-        PENDING_REVIEW = "PENDING_REVIEW", "Pending review"
-        IN_REVIEW = "IN_REVIEW", "In review"
+        # Locked lifecycle statuses across MDU (and later loader)
         ACTIVE = "ACTIVE", "Active"
-        REJECTED = "REJECTED", "Rejected"
+        IN_REVIEW = "IN_REVIEW", "In Review"
         RETIRED = "RETIRED", "Retired"
 
     class DataClassification(models.TextChoices):
@@ -33,7 +32,7 @@ class MDUHeader(models.Model):
     ref_name = models.CharField(max_length=200, unique=True)
     ref_type = models.CharField(max_length=20, default="map")
     mode = models.CharField(max_length=20, default="versioning")
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING_REVIEW)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_REVIEW)
 
     # Existing fields
     description = models.CharField(max_length=400, blank=True, default="")
