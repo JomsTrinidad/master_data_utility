@@ -57,7 +57,7 @@
   <div class="text-muted small mb-2">Left = before, Right = after</div>
 
   <div class="diff-table-wrapper">
-    <table class="table table-sm table-bordered diff-table align-middle w-100">
+    <table class="table table-hover align-middle mdu-table diff-table w-100">
       <thead>
         <tr>
         
@@ -92,7 +92,7 @@
 
 
                 {% if c.changed %}
-                  <div class="small mt-1" style="color: #28a745;">changed</div>
+                  <div class="small mt-1" class="text-success">changed</div>
                 {% endif %}
               </td>
             {% endfor %}

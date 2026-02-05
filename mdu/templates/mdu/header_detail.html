@@ -85,7 +85,7 @@
           <!-- Card 1: Identity -->
           <div class="col-lg-4">
             <div class="p-3 rounded-3 bg-light h-100">
-              <div class="text-muted large text-uppercase mb-3 fw-semibold" style="letter-spacing: 0.3em;">Identity</div>
+              <div class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Identity</div>
 
               <div class="mb-2">
                 <div class="text-muted small">Reference Name</div>
@@ -122,7 +122,7 @@
           <!-- Card 2: Lifecycle -->
           <div class="col-lg-4">
             <div class="p-3 rounded-3 bg-light h-100">
-              <div  class="text-muted large text-uppercase mb-3 fw-semibold" style="letter-spacing: .3em;">Lifecycle</div>
+              <div  class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Lifecycle</div>
 
               <div class="row g-2">
                 <div class="col-6">
@@ -169,7 +169,7 @@
           <div class="col-lg-4">
            
             <div class="p-3 rounded-3 bg-light h-100">
-              <div  class="text-muted large text-uppercase mb-3 fw-semibold" style="letter-spacing: .3em;">Governance</div>
+              <div  class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Governance</div>
 
 
               <div class="mb-2">
@@ -223,7 +223,7 @@
           <div class="col-12">
             <div class="p-3 rounded-3 bg-body-tertiary">
               <div class="text-muted small mb-1">Description</div>
-              <div class="text-break" style="line-height: 1.6;">
+              <div class="text-break" class="lh-lg">
                 {% if header.description %}{{ header.description }}{% else %}<span class="text-muted">—</span>{% endif %}
               </div>
             </div>
@@ -239,11 +239,11 @@
     <!-- APPROVED DATA (full dataset) -->
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingApproved">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseApproved" aria-expanded="false" aria-controls="collapseApproved">
+        <button class="accordion-button expanded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseApproved" aria-expanded="false" aria-controls="collapseApproved">
           Approved data
         </button>
       </h2>
-      <div id="collapseApproved" class="accordion-collapse collapse" aria-labelledby="headingApproved">
+      <div id="collapseApproved" class="accordion-collapse expand" aria-labelledby="headingApproved">
         <div class="accordion-body">
 
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -289,48 +289,45 @@
 
             {% if data_rows %}
             <div class="table-responsive sticky-table">
-              <table class="table table-sm table-striped table-bordered align-middle">
+              <table class="table table-hover align-left mdu-table">
                 <thead>
-                  <tr class="sticky-first-row">
-                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">ref_name</th>
-                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">row_type</th>
-                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">mode</th>
+                  <tr class="sticky-first-row ">
+                    <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>ref_name</em></th>
+                    <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>row_type</em></th>
+                    <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>mode</em></th>
 
                     {% if header.mode != "snapshot" %}
-                      <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">start_date</th>
-                      <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">end_date</th>
+                      <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>start_date</em></th>
+                      <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>end_date</em></th>
                     {% endif %}
 
-                    <th class="small text-nowrap py-3 px-1 fw-medium text-body-secondary text-primary-emphasis">current_version</th>
+                    <th class="small text-nowrap pe-3 pt-3 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>current_version</em></th>
 
                     {% for c in visible_cols %}
-                      <th class="small text-nowrap py-1 px-3 fw-medium text-body-secondary text-primary-emphasis">
-                        <div class="small text-body-secondary fw-medium text-primary-emphasis">{{ col_labels|get_item:c|default:"" }}</div>
-                        <div class="small text-body-secondary fw-medium text-primary-emphasis">[<em>{{ c }}</em>]</div>
-
-                      </th>
+                      <th class="small text-nowrap pe-3 pt-4 pb-1 fw-medium text-body-secondary text-primary-emphasis"><em>{{ c }}</em></th>
                     {% endfor %}
+
                   </tr>
                 </thead>
 
                 <tbody class="small text-body-secondary fw-normal">
                   {% for r in data_rows %}
                     <tr class="{% if r.row_type|lower == 'header' %}table-light{% endif %}">
-                      <td class="text-nowrap">{{ header.ref_name }}</td>
-                      <td class="text-nowrap">{{ r.row_type|default:"" }}</td>
-                      <td class="text-nowrap">{{ header.mode|default:"—" }}</td>
+                      <td class="text-nowrap text-body-secondary">{{ header.ref_name }}</td>
+                      <td class="text-nowrap text-body-secondary">{{ r.row_type|default:"" }}</td>
+                      <td class="text-nowrap text-body-secondary">{{ header.mode|default:"—" }}</td>
 
                       {% if header.mode != "snapshot" %}
-                        <td class="text-nowrap">{{ r.start_dt|default:"" }}</td>
-                        <td class="text-nowrap">{{ r.end_dt|default:"" }}</td>
+                        <td class="text-nowrap text-body-secondary">{{ r.start_dt|default:"" }}</td>
+                        <td class="text-nowrap text-body-secondary">{{ r.end_dt|default:"" }}</td>
                       {% endif %}
 
-                      <td class="text-nowrap" style="padding-left: 1rem;">
+                      <td class="text-nowrap ps-5 text-body-secondary">
                         {% if latest %}{{ latest.version }}{% else %}—{% endif %}
                       </td>
 
                       {% for c in visible_cols %}
-                        <td class="text-nowrap">{{ r|get_item:c }}</td>
+                        <td class="text-nowrap pe-5 text-body-secondary">{{ r|get_item:c }}</td>
                       {% endfor %}
                     </tr>
                   {% endfor %}
@@ -427,7 +424,7 @@
 
           {% if certs %}
             <div class="table-responsive">
-              <table class="table table-sm table-bordered align-middle">
+              <table class="table table-hover align-middle mdu-table">
                 <thead>
                   <tr>
                     <th>Status</th>
@@ -507,7 +504,7 @@
 <style>
 /* ===== Container ===== */
 .sticky-table {
-  --header-height: 54px;
+  --header-height: 49px;
   max-height: 70vh;
   overflow: auto;
   background: #fff;
@@ -517,7 +514,7 @@
 .sticky-table table {
   border-collapse: separate !important;
   border-spacing: 0 !important;
-  border: 1px solid #dee2e6;
+  border: 0px solid #dee2e6;
 }
 
 /* ===== Shared sticky cell base ===== */
@@ -525,7 +522,8 @@
 .sticky-table tbody tr.sticky-first-row td {
   position: sticky;
   background-clip: padding-box;
-  border: 1px solid #dee2e6;
+  border: 0px solid #dee2e6;
+  
 }
 
 /* ===== Header ===== */
@@ -533,7 +531,8 @@
   top: 0;
   z-index: 5;
   background: #f8f9fa;
-
+  border-left: 0px solid #f31505; 
+  border-right: 0px solid #f31505; 
 }
 
 /* ===== First body row ===== */
@@ -541,22 +540,25 @@
   top: var(--header-height);
   z-index: 4;
   background: #fff;
-
+  border-right: 3px solid #f31505; 
 }
 
 /* ===== Vertical borders for non-sticky body cells ===== */
 .sticky-table tbody td {
-  border-left: 1px solid #dee2e6;
-  border-right: 1px solid #dee2e6;
+  border-left: 0px solid #dee2e6; /*#dee2e6;*/
+  border-right: 0px solid #dee2e6;
 }
 
 .sticky-table tbody tr:first-child td {
   position: sticky;
   top: var(--header-height);
   z-index: 4;
-  background: #fff;
+  background: #f8f9fa;
   background-clip: padding-box;
-  border: 1px solid #dee2e6;
+  border: 0px solid #f31505;
+  color: rgba(33,37,41,.50);
+  font-weight: 700;
+  border-bottom: 2px solid rgba(33,37,41,.50);
 }
 
 .accordion-button.collapsed {
@@ -566,6 +568,69 @@
     rgba(13, 110, 253, 0)
   );
 }
+
+
+
+/* ========================================
+   ADD THIS SECTION FOR BANDED ROWS
+   ======================================== */
+
+/* Subtle alternating row background */
+.sticky-table tbody tr:nth-child(odd) td {
+  background-color: #fff;
+}
+
+.sticky-table tbody tr:nth-child(even) td {
+  background-color: rgba(0,0,0,.018);
+}
+
+/* Preserve first row (header row) styling */
+.sticky-table tbody tr:first-child td {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 4;
+  background: #f8f9fa !important; /* Force header row to stay distinct */
+  background-clip: padding-box;
+  border: 0px solid #f31505;
+  color: rgba(33,37,41,.50);
+  font-weight: 700;
+  border-bottom: 2px solid rgba(33,37,41,.50);
+}
+
+/* Hover state - highlight entire row with subtle blue */
+.sticky-table tbody tr:hover td {
+  background-color: rgba(13,110,253,.045) !important;
+  transition: background-color 0.15s ease;
+}
+
+/* Keep first row from getting hover effect (it's the header) */
+.sticky-table tbody tr:first-child:hover td {
+  background-color: #f8f9fa !important;
+}
+
+/* ======================================== */
+
+.accordion-button.collapsed {
+  background-image: linear-gradient(
+    to right,
+    rgba(13, 110, 253, 0.06),
+    rgba(13, 110, 253, 0)
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 </style>
 
 

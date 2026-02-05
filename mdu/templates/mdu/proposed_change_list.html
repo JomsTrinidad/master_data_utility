@@ -41,10 +41,10 @@
         {% csrf_token %}
 
         <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle">
+          <table class="table table-hover align-middle mdu-table">
             <thead>
               <tr>
-                <th style="width: 1px;"></th>
+                <th class="mdu-col-min"></th>
                 <th class="text-nowrap">Display ID</th>
                 <th class="text-nowrap">Reference</th>
                 <th class="text-nowrap">Workflow</th>
@@ -125,7 +125,7 @@
 
     {% if submitted %}
       <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
+        <table class="table table-hover align-middle mdu-table">
           <thead>
             <tr>
               <th class="text-nowrap">Display ID</th>
@@ -167,7 +167,7 @@
 
     {% if decisioned %}
       <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
+        <table class="table table-hover align-middle mdu-table">
           <thead>
             <tr>
               <th class="text-nowrap">Display ID</th>

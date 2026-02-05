@@ -203,7 +203,7 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table table-sm table-striped align-middle">
+            <table class="table table-hover align-middle mdu-table">
   <thead>
     <tr>
       <th class="text-nowrap">Row Type</th>
@@ -232,7 +232,7 @@
           {% if r.change_comment %}
             <span
               class="d-inline-block text-truncate"
-              style="max-width: 240px;"
+              class="mdu-maxw-240"
               data-bs-toggle="tooltip"
               data-bs-title="{{ r.change_comment|escape }}"
             >{{ r.change_comment }}</span>

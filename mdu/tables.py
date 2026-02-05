@@ -25,7 +25,7 @@ class HeaderTable(tables.Table):
     class Meta:
         model = MDUHeader
         fields = ("ref_name", "description", "ref_type", "mode", "status", "pending_review", "workflow", "updated_at")
-        attrs = {"class": "table table-striped table-hover align-middle"}
+        attrs = {"class": "table table-hover align-middle"}
         row_attrs = {
             "data-href": lambda record: reverse("mdu:header_detail", kwargs={"pk": record.pk}),
             "role": "button",
@@ -68,11 +68,11 @@ class ProposedChangeTable(tables.Table):
     class Meta:
         model = ChangeRequest
         fields = ("display_id", "header", "status", "submitted_at", "decided_at")
-        attrs = {"class": "table table-striped table-hover align-middle"}
+        attrs = {"class": "table table-hover align-middle"}
 
 class CertTable(tables.Table):
     header = tables.Column(linkify=("mdu:header_detail", {"pk": tables.A("header_id")}))
     class Meta:
         model = MDUCert
         fields = ("header", "cert_cycle_id", "certification_status", "cert_expiry_dttm")
-        attrs = {"class": "table table-striped table-hover align-middle"}
+        attrs = {"class": "table table-hover align-middle"}

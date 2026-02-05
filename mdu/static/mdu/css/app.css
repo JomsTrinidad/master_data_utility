@@ -115,6 +115,32 @@ table tbody td {
   color: rgba(33,37,41,.88);
 }
 
+
+
+/* =========================
+   MDU table standard (use across screens)
+   Matches proposed_change_list Decisioned table look
+   ========================= */
+
+.mdu-table {
+  width: 100%;
+}
+
+/* Utility: minimal-width columns (e.g., checkboxes) */
+.mdu-col-min { width: 1%; white-space: nowrap; }
+
+/* Utility: fixed narrow icon/number columns */
+.mdu-col-44 { width: 44px; }
+
+/* Utility: min width helpers */
+.mdu-minw-10 { min-width: 10rem; }
+
+/* Utility: max width helpers */
+.mdu-maxw-240 { max-width: 240px; }
+
+/* Utility: subtle tracking for Display ID */
+.mdu-tracking { letter-spacing: .3em; }
+
 /* =========================
    Sticky table container (Header Detail + any table using .sticky-table)
    ========================= */
@@ -453,4 +479,9 @@ tr.mdu-row-deleted .mdu-row-toggle-delete:hover {
   color: rgba(108, 117, 125, 0.90);
   text-decoration: line-through;
 }
+
+
+
+
+
 

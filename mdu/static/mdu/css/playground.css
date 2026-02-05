@@ -1,0 +1,152 @@
+/* ===== Container ===== */
+.sticky-table {
+  --header-height: 52px; /* Slightly taller for better readability */
+  max-height: 70vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 6px;
+}
+
+/* Kill collapsed-border artifacts */
+.sticky-table table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 0;
+}
+
+/* ========================================
+   IMPROVED: Column Headers (thead)
+   ======================================== */
+
+.sticky-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: linear-gradient(to bottom, #f8f9fa 0%, #f1f3f5 100%);
+  background-clip: padding-box;
+  
+  /* Better typography */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-style: normal; /* Remove italic */
+  color: rgba(33,37,41,.65);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  
+  /* Spacing */
+  padding: 10px 16px;
+  text-align: left;
+  white-space: nowrap;
+  
+  /* Borders */
+  border-bottom: 2px solid rgba(0,0,0,.12);
+  border-right: 1px solid rgba(0,0,0,.06);
+}
+
+.sticky-table thead th:last-child {
+  border-right: 0;
+}
+
+/* ========================================
+   IMPROVED: First Body Row (data header)
+   ======================================== */
+
+.sticky-table tbody tr:first-child td {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 4;
+  
+  /* Distinct from column headers */
+  background: #fff !important;
+  background-clip: padding-box;
+  
+  /* Typography - bold and dark for clarity */
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: rgba(33,37,41,.85);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  
+  /* Spacing */
+  padding: 10px 16px;
+  
+  /* Strong bottom border */
+  border-bottom: 2px solid rgba(0,0,0,.15) !important;
+  border-right: 1px solid rgba(0,0,0,.05);
+}
+
+/* ========================================
+   BANDED ROWS
+   ======================================== */
+
+.sticky-table tbody tr:nth-child(odd) td {
+  background-color: #fff;
+}
+
+.sticky-table tbody tr:nth-child(even) td {
+  background-color: rgba(0,0,0,.018);
+}
+
+/* Regular data cells */
+.sticky-table tbody td {
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  color: rgba(33,37,41,.88);
+  border-right: 1px solid rgba(0,0,0,.04);
+  border-bottom: 1px solid rgba(0,0,0,.04);
+}
+
+.sticky-table tbody td:last-child {
+  border-right: 0;
+}
+
+/* ========================================
+   HOVER STATE
+   ======================================== */
+
+.sticky-table tbody tr:hover td {
+  background-color: rgba(13,110,253,.045) !important;
+  transition: background-color 0.12s ease;
+}
+
+/* Don't hover the sticky header row */
+.sticky-table tbody tr:first-child:hover td {
+  background-color: #fff !important;
+}
+
+/* ========================================
+   VISUAL GROUPING: System vs Business Columns
+   ======================================== */
+
+/* Add stronger border after system columns (first 3 or 4 columns) */
+.sticky-table thead th:nth-child(3),
+.sticky-table tbody td:nth-child(3) {
+  border-right: 2px solid rgba(0,0,0,.15) !important;
+}
+
+/* Optional: Subtle background tint for system columns */
+.sticky-table tbody td:nth-child(1),
+.sticky-table tbody td:nth-child(2),
+.sticky-table tbody td:nth-child(3) {
+  background-color: rgba(0,0,0,.008);
+}
+
+.sticky-table tbody tr:nth-child(even) td:nth-child(1),
+.sticky-table tbody tr:nth-child(even) td:nth-child(2),
+.sticky-table tbody tr:nth-child(even) td:nth-child(3) {
+  background-color: rgba(0,0,0,.025);
+}
+
+/* ========================================
+   ACCORDION STYLING
+   ======================================== */
+
+.accordion-button.collapsed {
+  background-image: linear-gradient(
+    to right,
+    rgba(13, 110, 253, 0.06),
+    rgba(13, 110, 253, 0)
+  );
+}
