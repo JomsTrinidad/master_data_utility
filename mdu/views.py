@@ -6,6 +6,8 @@ from django.utils.safestring import mark_safe
 from django.http import FileResponse, Http404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.db.models import Exists, OuterRef, Q
 from django.urls import reverse
 from django.db import IntegrityError
@@ -136,10 +138,16 @@ def catalog(request):
     table = HeaderTable(f.qs)
     RequestConfig(request, paginate={"per_page": 15}).configure(table)
 
+    # Manual pagination for Figma-matched catalog template
+    from django.core.paginator import Paginator
+    paginator = Paginator(f.qs, 15)
+    page_number = request.GET.get("page", 1)
+    page_obj = paginator.get_page(page_number)
+
     return render(
         request,
         "mdu/catalog.html",
-        {"filter": f, "table": table, 
+        {"filter": f, "table": table, "page_obj": page_obj,
          "breadcrumbs": [{"label": "Catalog", "url": None},],
          **_role_flags(request.user)},
     )
@@ -1055,6 +1063,7 @@ def propose_change(request, header_pk):
             pass
 
         post = request.POST.copy()
+        action = None
 
         if not (post.get("picker") == "1" and post.get("action") in ("create_new", "discard_and_create_new")):
             request_overview_open = (post.get("request_overview_open") == "1")
@@ -1422,6 +1431,10 @@ def proposed_change_detail(request, pk):
 
     once_approved_total = unchanged + updated + added + deleted
 
+    # Change category display label
+    change_category_choices = dict(ChangeRequest._meta.get_field("change_category").flatchoices)
+    change_category_label = change_category_choices.get(ch.change_category, ch.change_category or "")
+
     return render(request, "mdu/proposed_change_detail.html", {
         "ch": ch,
         "breadcrumbs": [
@@ -1441,6 +1454,7 @@ def proposed_change_detail(request, pk):
         "view_counts": {"all": all_count, "changes": changes_count},
         "diff_format": diff_format,
         "show_effective_dates": show_effective_dates,
+        "change_category_label": change_category_label,
         "change_summary": {
             "started_total": started_total,
             "once_approved_total": once_approved_total,
@@ -2100,17 +2114,6 @@ def _apply_cell_edits_to_payload_json(payload_json: str, post_data) -> str:
             continue
 
         # change_comment__<idx> (optional, user-facing)
-        if key.startswith("change_comment__"):
-            try:
-                _, idx_str = key.split("__", 1)
-                idx = int(idx_str)
-            except Exception:
-                continue
-            if 0 <= idx < len(rows) and isinstance(rows[idx], dict):
-                rows[idx]["change_comment"] = (val or "").strip()
-            continue
-
-        # change_comment__<idx> (optional)
         if key.startswith("change_comment__"):
             try:
                 _, idx_str = key.split("__", 1)

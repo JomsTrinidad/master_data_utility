@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if mode == "edit" %}Edit Reference{% else %}Create New Reference{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ============================
+   Header Form  -  Figma-matched
+   ============================ */
+
+.hf-page { max-width: 820px; margin: 0 auto; }
+
+/* --- Sticky top bar --- */
+.hf-topbar {
+  position: sticky;
+  top: 56px;
+  z-index: 20;
+  background: #f8f9fa;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  padding: 1rem 0 .85rem;
+  margin: -1.5rem -12px 1.5rem;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.hf-topbar h4 {
+  font-weight: 700;
+  font-size: 1.25rem;
+  margin: 0;
+  color: #1a1a2e;
+  letter-spacing: -.01em;
+}
+
+.hf-topbar .hf-subtitle {
+  font-size: .82rem;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+/* --- Collapsible sections --- */
+.hf-section {
+  border: 1.5px dashed rgba(0,0,0,.13);
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+  background: #fff;
+}
+
+.hf-section[open] {
+  border-color: rgba(0,0,0,.16);
+}
+
+.hf-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.75rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  border-radius: 12px;
+  transition: background .15s;
+}
+
+.hf-section summary:hover {
+  background: rgba(0,0,0,.015);
+}
+
+.hf-section summary::-webkit-details-marker { display: none; }
+
+.hf-section-title {
+  font-weight: 700;
+  font-size: .95rem;
+  color: #1a1a2e;
+  letter-spacing: .01em;
+}
+
+/* Chevron indicator */
+.hf-chevron {
+  width: 20px;
+  height: 20px;
+  color: #8a8a9a;
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+
+.hf-section[open] .hf-chevron {
+  transform: rotate(180deg);
+}
+
+/* Section body */
+.hf-section-body {
+  padding: 0 1.75rem 1.75rem;
+}
+
+/* --- Field labels --- */
+.hf-label {
+  font-weight: 600;
+  font-size: .84rem;
+  color: #2d2d3a;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.hf-label .hf-required {
+  color: #dc3545;
+  margin-left: 3px;
+  font-weight: 400;
+}
+
+/* --- Help text --- */
+.hf-help {
+  font-size: .78rem;
+  color: #8a8a9a;
+  margin-top: 5px;
+  line-height: 1.35;
+}
+
+/* --- Text inputs --- */
+.hf-input {
+  display: block;
+  width: 100%;
+  padding: .6rem .85rem;
+  font-size: .9rem;
+  color: #212529;
+  background-color: #f4f5f7;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  transition: border-color .15s, background-color .15s, box-shadow .15s;
+}
+
+.hf-input:focus {
+  background-color: #fff;
+  border-color: rgba(79, 70, 229, .45);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, .08);
+  outline: none;
+}
+
+.hf-input::placeholder { color: #adb5bd; }
+
+textarea.hf-input { min-height: 90px; resize: vertical; }
+
+/* --- Select dropdowns --- */
+.hf-select {
+  display: block;
+  width: 100%;
+  padding: .6rem .85rem;
+  padding-right: 2.5rem;
+  font-size: .9rem;
+  color: #212529;
+  background-color: #f4f5f7;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236c757d' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .85rem center;
+  transition: border-color .15s, background-color .15s, box-shadow .15s;
+}
+
+.hf-select:focus {
+  background-color: #fff;
+  border-color: rgba(79, 70, 229, .45);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, .08);
+  outline: none;
+}
+
+/* --- Toggle button group (pill toggles) --- */
+.hf-toggle-group {
+  display: inline-flex;
+  background: #f4f5f7;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.hf-toggle-group input[type="radio"] { display: none; }
+
+.hf-toggle-group label {
+  display: inline-block;
+  padding: 7px 18px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: #6c757d;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  user-select: none;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hf-toggle-group label:hover {
+  color: #495057;
+  background: rgba(0,0,0,.04);
+}
+
+.hf-toggle-group input[type="radio"]:checked + label {
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, .25);
+}
+
+/* --- Toggle switch --- */
+.hf-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hf-switch-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.hf-switch-track input { opacity: 0; width: 0; height: 0; }
+
+.hf-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: #ced4da;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.hf-switch-slider::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
+}
+
+.hf-switch-track input:checked + .hf-switch-slider { background: #4f46e5; }
+.hf-switch-track input:checked + .hf-switch-slider::before { transform: translateX(20px); }
+
+.hf-switch-text { flex: 1; }
+.hf-switch-text .hf-label { margin-bottom: 2px; }
+
+/* --- Field row spacing --- */
+.hf-field { margin-bottom: 1.25rem; }
+.hf-field:last-child { margin-bottom: 0; }
+
+/* --- Errors --- */
+.hf-error { font-size: .78rem; color: #dc3545; margin-top: 4px; }
+
+/* --- Buttons --- */
+.hf-btn-cancel {
+  padding: .55rem 1.5rem;
+  font-size: .88rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(0,0,0,.15);
+  border-radius: 8px;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .15s;
+}
+.hf-btn-cancel:hover { background: #f4f5f7; color: #212529; text-decoration: none; }
+
+.hf-btn-submit {
+  padding: .55rem 1.5rem;
+  font-size: .88rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: #1a1a2e;
+  color: #fff;
+  cursor: pointer;
+  transition: all .15s;
+}
+.hf-btn-submit:hover { background: #2d2d4a; }
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  .hf-section summary { padding: 1rem 1rem; }
+  .hf-section-body { padding: 0 1rem 1.25rem; }
+  .hf-toggle-group label { padding: 6px 12px; font-size: .78rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hf-page">
+
+  <form method="post" novalidate id="headerForm">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger mb-3">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {# ====== Sticky top bar ====== #}
+    <div class="hf-topbar">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h4>{% if mode == "edit" %}Edit Reference{% else %}Create New Reference{% endif %}</h4>
+          <div class="hf-subtitle">
+            {% if mode == "edit" %}
+              Update governance and structure for this reference dataset.
+            {% else %}
+              Define governance and structure for a new reference dataset.
+            {% endif %}
+          </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-shrink-0">
+          <a class="hf-btn-cancel"
+             href="{% if header %}{% url 'mdu:header_detail' header.pk %}{% else %}{% url 'mdu:catalog' %}{% endif %}">
+            Cancel
+          </a>
+          <button class="hf-btn-submit" type="submit">
+            {% if mode == "edit" %}Save Changes{% else %}Create Reference{% endif %}
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    {# ============================================================ #}
+    {# SECTION 1: Reference Identity  (open by default)             #}
+    {# ============================================================ #}
+    <details class="hf-section" open>
+      <summary>
+        <span class="hf-section-title">Reference Identity</span>
+        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+      </summary>
+      <div class="hf-section-body">
+
+        {# Reference Name #}
+        <div class="hf-field">
+          <label class="hf-label">Reference Name <span class="hf-required">*</span></label>
+          <input type="text" name="ref_name" class="hf-input"
+                 value="{{ form.ref_name.value|default:'' }}"
+                 placeholder="Unique logical name of the reference dataset."
+                 maxlength="200" required>
+          <div class="hf-help">Unique logical name of the reference dataset.</div>
+          {% if form.ref_name.errors %}<div class="hf-error">{{ form.ref_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Reference Type toggle: MAP / LIST #}
+        <div class="hf-field">
+          <label class="hf-label">Reference Type <span class="hf-required">*</span></label>
+          <div class="hf-toggle-group">
+            <input type="radio" name="ref_type" id="refType_map" value="map"
+                   {% if form.ref_type.value == "map" or not form.ref_type.value %}checked{% endif %}>
+            <label for="refType_map">Map</label>
+            <input type="radio" name="ref_type" id="refType_list" value="list"
+                   {% if form.ref_type.value == "list" %}checked{% endif %}>
+            <label for="refType_list">List</label>
+          </div>
+          <div class="hf-help">MAP: Key-value mapping &middot; LIST: Enumerated values</div>
+          {% if form.ref_type.errors %}<div class="hf-error">{{ form.ref_type.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Mode toggle: SNAPSHOT / VERSIONED #}
+        <div class="hf-field">
+          <label class="hf-label">Mode <span class="hf-required">*</span></label>
+          <div class="hf-toggle-group">
+            <input type="radio" name="mode" id="mode_snapshot" value="snapshot"
+                   {% if form.mode.value == "snapshot" %}checked{% endif %}>
+            <label for="mode_snapshot">Snapshot</label>
+            <input type="radio" name="mode" id="mode_versioning" value="versioning"
+                   {% if form.mode.value == "versioning" or not form.mode.value %}checked{% endif %}>
+            <label for="mode_versioning">Versioned</label>
+          </div>
+          <div class="hf-help">SNAPSHOT: Dataset replaced &middot; VERSIONED: Row lifecycle tracking</div>
+          {% if form.mode.errors %}<div class="hf-error">{{ form.mode.errors.0 }}</div>{% endif %}
+        </div>
+
+      </div>
+    </details>
+
+
+    {# ============================================================ #}
+    {# SECTION 2: Governance Controls  (collapsed by default)       #}  
+    {# ============================================================ #}
+    <details class="hf-section">
+      <summary>
+        <span class="hf-section-title">Governance Controls</span>
+        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+      </summary>
+      <div class="hf-section-body">
+
+        {# Data Classification toggle: GENERAL / CLASSIFIED #}
+        <div class="hf-field">
+          <label class="hf-label">Data Classification <span class="hf-required">*</span></label>
+          <div class="hf-toggle-group">
+            <input type="radio" name="data_classification" id="dc_general" value="GENERAL"
+                   {% if form.data_classification.value == "GENERAL" or not form.data_classification.value %}checked{% endif %}>
+            <label for="dc_general">General</label>
+            <input type="radio" name="data_classification" id="dc_classified" value="CLASSIFIED"
+                   {% if form.data_classification.value == "CLASSIFIED" %}checked{% endif %}>
+            <label for="dc_classified">Classified</label>
+          </div>
+          <div class="hf-help">GENERAL: Broad visibility &middot; CLASSIFIED: Controlled access</div>
+          {% if form.data_classification.errors %}<div class="hf-error">{{ form.data_classification.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Workflow Type toggle: SINGLE / COLLABORATIVE #}
+        <div class="hf-field">
+          <label class="hf-label">Workflow Type <span class="hf-required">*</span></label>
+          <div class="hf-toggle-group">
+            <input type="radio" name="collaboration_mode" id="cm_single" value="SINGLE_OWNER"
+                   {% if form.collaboration_mode.value == "SINGLE_OWNER" or not form.collaboration_mode.value %}checked{% endif %}>
+            <label for="cm_single">Single</label>
+            <input type="radio" name="collaboration_mode" id="cm_collab" value="COLLABORATIVE"
+                   {% if form.collaboration_mode.value == "COLLABORATIVE" %}checked{% endif %}>
+            <label for="cm_collab">Collaborative</label>
+          </div>
+          <div class="hf-help">SINGLE: One approver &middot; COLLABORATIVE: Multiple sign-offs</div>
+          {% if form.collaboration_mode.errors %}<div class="hf-error">{{ form.collaboration_mode.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Approver Group #}
+        <div class="hf-field">
+          <label class="hf-label">Approver Group <span class="hf-required">*</span></label>
+          <select name="approver_group_mapping" class="hf-select">
+            <option value="" {% if not form.approver_group_mapping.value %}selected{% endif %}>Select Approver Group</option>
+            {% if form.approver_group_mapping.value %}
+              <option value="{{ form.approver_group_mapping.value }}" selected>{{ form.approver_group_mapping.value }}</option>
+            {% endif %}
+          </select>
+          <div class="hf-help">Group responsible for final approval.</div>
+          {% if form.approver_group_mapping.errors %}<div class="hf-error">{{ form.approver_group_mapping.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Status: visible on edit only #}
+        {% if mode == "edit" %}
+        <div class="hf-field">
+          <label class="hf-label">Status</label>
+          <select name="status" class="hf-select">
+            {% for val, label in form.fields.status.choices %}
+              <option value="{{ val }}" {% if form.status.value == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if form.status.errors %}<div class="hf-error">{{ form.status.errors.0 }}</div>{% endif %}
+        </div>
+        {% else %}
+          <input type="hidden" name="status" value="IN_REVIEW">
+        {% endif %}
+
+      </div>
+    </details>
+
+
+    {# ============================================================ #}
+    {#   SECTION 3: Business Context  (collapsed by default)        #}
+    {# ============================================================ #}
+    <details class="hf-section">
+      <summary>
+        <span class="hf-section-title">Business Context</span>
+        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+      </summary>
+      <div class="hf-section-body">
+
+        {# Business Domain #}
+        <div class="hf-field">
+          <label class="hf-label">Business Domain <span class="hf-required">*</span></label>
+          <select name="owning_domain_lob" class="hf-select">
+            <option value="" {% if not form.owning_domain_lob.value %}selected{% endif %}>Select Business Domain</option>
+            {% if form.owning_domain_lob.value %}
+              <option value="{{ form.owning_domain_lob.value }}" selected>{{ form.owning_domain_lob.value }}</option>
+            {% endif %}
+          </select>
+          {% if form.owning_domain_lob.errors %}<div class="hf-error">{{ form.owning_domain_lob.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Description #}
+        <div class="hf-field">
+          <label class="hf-label">Description <span class="hf-required">*</span></label>
+          <textarea name="description" class="hf-input"
+                    placeholder="Provide a clear business purpose and intended usage of this reference."
+                    maxlength="400">{{ form.description.value|default:'' }}</textarea>
+          <div class="hf-help">Provide a clear business purpose and intended usage of this reference.</div>
+          {% if form.description.errors %}<div class="hf-error">{{ form.description.errors.0 }}</div>{% endif %}
+        </div>
+
+        {# Certification Required (toggle switch) #}
+        <div class="hf-field">
+          <div class="hf-switch">
+            <div class="hf-switch-text">
+              <label class="hf-label" for="certRequired">Certification Required</label>
+              <div class="hf-help" style="margin-top:0">If enabled, this reference will enter periodic certification workflow.</div>
+            </div>
+            <label class="hf-switch-track">
+              <input type="checkbox" id="certRequired" name="cert_required" value="1"
+                     {% if form.effective_dating_rules.value == "cert_required" %}checked{% endif %}>
+              <span class="hf-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </details>
+
+
+    {# ============================================================ #}
+    {# SECTION 4: Advanced Settings  (collapsed by default)         #}
+    {# ============================================================ #}
+    <details class="hf-section">
+      <summary>
+        <span class="hf-section-title">Advanced Settings</span>
+        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+      </summary>
+      <div class="hf-section-body">
+
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Category</label>
+              <input type="text" name="category" class="hf-input"
+                     value="{{ form.category.value|default:'' }}" placeholder="e.g., Payments, Segmentation">
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Tags</label>
+              <input type="text" name="tags" class="hf-input"
+                     value="{{ form.tags.value|default:'' }}" placeholder="Comma-separated">
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Approval Model</label>
+              <select name="approval_model" class="hf-select">
+                {% for val, label in form.fields.approval_model.choices %}
+                  <option value="{{ val }}" {% if form.approval_model.value == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Approval Scope</label>
+              <select name="approval_scope" class="hf-select">
+                {% for val, label in form.fields.approval_scope.choices %}
+                  <option value="{{ val }}" {% if form.approval_scope.value == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Effective Dating Rules</label>
+              <input type="text" name="effective_dating_rules" class="hf-input"
+                     value="{{ form.effective_dating_rules.value|default:'' }}">
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">History Retention</label>
+              <input type="text" name="history_retention_expectations" class="hf-input"
+                     value="{{ form.history_retention_expectations.value|default:'' }}">
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="hf-field">
+              <label class="hf-label">Owner Group</label>
+              <input type="text" name="owner_group" class="hf-input"
+                     value="{{ form.owner_group.value|default:'' }}">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </details>
+
+  </form>
+</div>
+{% endblock %}

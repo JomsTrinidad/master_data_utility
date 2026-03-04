@@ -1,6 +1,7 @@
 import json
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 
 from .models import MDUHeader, ChangeRequest
 
@@ -44,15 +45,18 @@ def compare_versions(request, pk):
     header = get_object_or_404(MDUHeader, pk=pk)
 
     # Approved changes with numeric versions
-					  
     approved = header.changes.filter(status=ChangeRequest.Status.APPROVED).exclude(version__isnull=True).order_by("-version")
-						
+
     v1 = request.GET.get("v1")
     v2 = request.GET.get("v2")
 
-    left = right = None
-    left_rows = right_rows = []
-    biz_cols = []
+    left = approved.filter(version=int(v1)).first() if v1 else None
+    right = approved.filter(version=int(v2)).first() if v2 else None
+
+    left_rows = _rows(left.payload_json) if left else []
+    right_rows = _rows(right.payload_json) if right else []
+
+    biz_cols = _build_cols(left_rows, right_rows) if (left and right) else []
     diff_rows = []
 
     if left and right:
@@ -85,8 +89,26 @@ def compare_versions(request, pk):
             diff_rows.append({
                 "key": f"row:{i+1}",
                 "cells": cells,
-                "row_changed": row_changed,   # ✅ precomputed
+                "row_changed": row_changed,
             })
+
+    return render(
+        request,
+        "mdu/compare_versions.html",
+        {
+            "header": header,
+            "approved": approved,
+            "left": left,
+            "right": right,
+            "biz_cols": biz_cols,
+            "diff_rows": diff_rows,
+            "breadcrumbs": [
+                {"label": "Catalog", "url": reverse("mdu:catalog")},
+                {"label": header.ref_name, "url": reverse("mdu:header_detail", kwargs={"pk": header.pk})},
+                {"label": "Compare Versions", "url": None},
+            ],
+        },
+    )
 
 
 @login_required

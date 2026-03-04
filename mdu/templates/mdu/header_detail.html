@@ -85,7 +85,7 @@
           <!-- Card 1: Identity -->
           <div class="col-lg-4">
             <div class="p-3 rounded-3 bg-light h-100">
-              <div class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Identity</div>
+              <div class="text-muted large text-uppercase mb-3 fw-semibold mdu-tracking">Identity</div>
 
               <div class="mb-2">
                 <div class="text-muted small">Reference Name</div>
@@ -122,7 +122,7 @@
           <!-- Card 2: Lifecycle -->
           <div class="col-lg-4">
             <div class="p-3 rounded-3 bg-light h-100">
-              <div  class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Lifecycle</div>
+              <div class="text-muted large text-uppercase mb-3 fw-semibold mdu-tracking">Lifecycle</div>
 
               <div class="row g-2">
                 <div class="col-6">
@@ -169,7 +169,7 @@
           <div class="col-lg-4">
            
             <div class="p-3 rounded-3 bg-light h-100">
-              <div  class="text-muted large text-uppercase mb-3 fw-semibold" class="mdu-tracking">Governance</div>
+              <div class="text-muted large text-uppercase mb-3 fw-semibold mdu-tracking">Governance</div>
 
 
               <div class="mb-2">
@@ -223,7 +223,7 @@
           <div class="col-12">
             <div class="p-3 rounded-3 bg-body-tertiary">
               <div class="text-muted small mb-1">Description</div>
-              <div class="text-break" class="lh-lg">
+              <div class="text-break lh-lg">
                 {% if header.description %}{{ header.description }}{% else %}<span class="text-muted">—</span>{% endif %}
               </div>
             </div>
@@ -239,11 +239,11 @@
     <!-- APPROVED DATA (full dataset) -->
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingApproved">
-        <button class="accordion-button expanded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseApproved" aria-expanded="false" aria-controls="collapseApproved">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseApproved" aria-expanded="true" aria-controls="collapseApproved">
           Approved Data
         </button>
       </h2>
-      <div id="collapseApproved" class="accordion-collapse expand" aria-labelledby="headingApproved">
+      <div id="collapseApproved" class="accordion-collapse collapse show" aria-labelledby="headingApproved">
         <div class="accordion-body">
 
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -455,6 +455,7 @@
                           <span class="text-muted">—</span>
                         {% endif %}
                       </td>
+                      <td>{{ c.cert_version|default:"—" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

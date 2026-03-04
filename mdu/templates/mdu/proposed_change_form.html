@@ -210,7 +210,7 @@
 
               <thead>
                 <tr class="sticky-first-row">
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1" class="mdu-col-44"></th>
+                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1 mdu-col-44"></th>
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-2">Row Type</th>
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-3">Operation</th>
                   <th class="text-nowrap mdu-sticky-col mdu-sticky-col-4">
@@ -266,8 +266,7 @@
 
                     <!-- Operation (UI label, derived; never editable) -->
                     <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-3 mdu-op-col">
-                      <input class="form-control form-control-sm text-start {% if r.operation|default:''|upper == 'RETIRE ROW' %}text-danger{% endif %}"
-                            class="mdu-minw-10"
+                      <input class="form-control form-control-sm text-start mdu-minw-10 {% if r.operation|default:''|upper == 'RETIRE ROW' %}text-danger{% endif %}"
                             id="opLabel-{{ row_index }}"
                             value="{% if r.row_type|lower == 'header' %}—{% endif %}"
                             readonly>

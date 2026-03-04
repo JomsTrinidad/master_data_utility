@@ -1,104 +1,394 @@
 {% extends "base.html" %}
 {% load django_tables2 %}
 {% block title %}Catalog{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ============================
+   Catalog  -  Figma-matched
+   ============================ */
+
+/* --- Page header --- */
+.cat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.cat-header-left .cat-crumb {
+  font-size: .78rem;
+  color: #8a8a9a;
+  margin-bottom: 2px;
+}
+
+.cat-header-left h3 {
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: #1a1a2e;
+  margin: 0;
+  letter-spacing: -.01em;
+}
+
+.cat-header-left .cat-subtitle {
+  font-size: .84rem;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.cat-btn-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: .55rem 1.25rem;
+  font-size: .85rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: #1a1a2e;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.cat-btn-new:hover { background: #2d2d4a; color: #fff; text-decoration: none; }
+
+/* --- Filter bar --- */
+.cat-filter-card {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.cat-filter-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+@media (max-width: 768px) {
+  .cat-filter-row { grid-template-columns: 1fr; }
+}
+
+.cat-filter-label {
+  display: block;
+  font-weight: 600;
+  font-size: .82rem;
+  color: #2d2d3a;
+  margin-bottom: 5px;
+}
+
+.cat-filter-input,
+.cat-filter-select {
+  display: block;
+  width: 100%;
+  padding: .55rem .8rem;
+  font-size: .88rem;
+  color: #212529;
+  background-color: #f4f5f7;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  transition: border-color .15s, background-color .15s, box-shadow .15s;
+}
+
+.cat-filter-input:focus,
+.cat-filter-select:focus {
+  background-color: #fff;
+  border-color: rgba(79, 70, 229, .4);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, .08);
+  outline: none;
+}
+
+.cat-filter-input::placeholder { color: #adb5bd; }
+
+.cat-filter-select {
+  padding-right: 2.2rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236c757d' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+}
+
+.cat-filter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: .85rem;
+}
+
+.cat-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .84rem;
+  color: #495057;
+  cursor: pointer;
+}
+
+.cat-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+.cat-filter-actions { display: flex; gap: 8px; }
+
+.cat-btn-reset {
+  padding: .45rem 1.1rem;
+  font-size: .84rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(0,0,0,.15);
+  border-radius: 8px;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .15s;
+}
+.cat-btn-reset:hover { background: #f4f5f7; color: #212529; text-decoration: none; }
+
+.cat-btn-apply {
+  padding: .45rem 1.1rem;
+  font-size: .84rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: #1a1a2e;
+  color: #fff;
+  cursor: pointer;
+  transition: all .15s;
+}
+.cat-btn-apply:hover { background: #2d2d4a; }
+
+/* --- Data table --- */
+.cat-table-wrap { overflow-x: auto; }
+
+.cat-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cat-table thead th {
+  padding: .7rem 1rem;
+  font-weight: 600;
+  font-size: .8rem;
+  color: #6c757d;
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1.5px solid rgba(0,0,0,.08);
+  background: transparent;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.cat-table tbody td {
+  padding: .85rem 1rem;
+  font-size: .88rem;
+  color: #212529;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  vertical-align: middle;
+}
+
+.cat-table tbody tr {
+  cursor: pointer;
+  transition: background .1s;
+}
+
+.cat-table tbody tr:hover td { background: rgba(79, 70, 229, .03); }
+.cat-table tbody tr:last-child td { border-bottom: none; }
+
+.cat-ref-name { font-weight: 600; color: #1a1a2e; white-space: nowrap; }
+
+.cat-desc {
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #6c757d;
+}
+
+.cat-meta { white-space: nowrap; color: #495057; }
+
+.cat-badge-review {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: .76rem;
+  font-weight: 600;
+  color: #856404;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.cat-empty { color: #ced4da; }
+
+/* --- Pagination --- */
+.cat-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0 .5rem;
+}
+
+.cat-pagination .page-link {
+  border-radius: 6px;
+  margin: 0 2px;
+  font-size: .84rem;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <div>
-    <h3 class="mb-0">MDU Catalog</h3>
-    <div class="text-muted">Browse authored reference data.</div>
+{# ====== Page header ====== #}
+<div class="cat-header">
+  <div class="cat-header-left">
+    <div class="cat-crumb">Catalog</div>
+    <h3>MDU Catalog</h3>
+    <div class="cat-subtitle">Browse authored reference data.</div>
   </div>
 
   {% if is_steward or is_approver %}
-    <div>
-      <a class="btn btn-sm btn-outline-primary" href="{% url 'mdu:header_create' %}">
-        + New reference
-      </a>
-    </div>
+    <a class="cat-btn-new" href="{% url 'mdu:header_create' %}">+ New reference</a>
   {% endif %}
 </div>
 
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
+{# ====== Filter bar ====== #}
+<form method="get" id="catalogFilter">
+<div class="cat-filter-card">
 
-    <form method="get" class="mb-2">
-      <div class="row g-2 align-items-end">
+  <div class="cat-filter-row">
+    <div>
+      <label class="cat-filter-label">Search</label>
+      <input type="text" name="q" class="cat-filter-input"
+             value="{{ filter.form.q.value|default:'' }}"
+             placeholder="Search name, tags, description...">
+    </div>
 
-        <div class="col-12 col-md-4">
-          <label class="form-label small text-muted mb-1">Search</label>
-          {{ filter.form.q }}
-        </div>
+    <div>
+      <label class="cat-filter-label">Status</label>
+      <select name="status" class="cat-filter-select">
+        <option value="">All</option>
+        {% for value, label in filter.form.fields.status.choices %}
+          {% if value %}
+            <option value="{{ value }}" {% if filter.form.status.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
 
-        <div class="col-12 col-md-2">
-          <label class="form-label small text-muted mb-1">Status</label>
-          {% with cur=filter.form.status.value %}
-          <select name="status" class="form-select">
-            <option value="" {% if not cur %}selected{% endif %}>All</option>
-            {% for value, label in filter.form.fields.status.choices %}
-              {% if value %}
-                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          {% endwith %}
-        </div>
+    <div>
+      <label class="cat-filter-label">Type</label>
+      <select name="ref_type" class="cat-filter-select">
+        <option value="">All</option>
+        {% for value, label in filter.form.fields.ref_type.choices %}
+          {% if value %}
+            <option value="{{ value }}" {% if filter.form.ref_type.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
 
-        <div class="col-12 col-md-2">
-          <label class="form-label small text-muted mb-1">Type</label>
-          {% with cur=filter.form.ref_type.value %}
-          <select name="ref_type" class="form-select">
-            <option value="" {% if not cur %}selected{% endif %}>All</option>
-            {% for value, label in filter.form.fields.ref_type.choices %}
-              {% if value %}
-                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          {% endwith %}
-        </div>
-
-
-        <div class="col-12 col-md-2">
-          <label class="form-label small text-muted mb-1">Mode</label>
-          {% with cur=filter.form.mode.value %}
-          <select name="mode" class="form-select">
-            <option value="" {% if not cur %}selected{% endif %}>All</option>
-            {% for value, label in filter.form.fields.mode.choices %}
-              {% if value %}
-                <option value="{{ value }}" {% if cur == value %}selected{% endif %}>{{ label }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          {% endwith %}
-        </div>
-
-
-        <div class="col-12 col-md-2">
-          <label class="form-label small text-muted mb-1 d-none d-md-block">&nbsp;</label>
-          <div class="d-flex gap-2 flex-wrap catalog-action-buttons">
-            <button class="btn btn-primary" type="submit">Apply</button>
-            <a class="btn btn-outline-secondary" href="{% url 'mdu:catalog' %}">Reset</a>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="form-check mt-2">
-        <input class="form-check-input" type="checkbox" name="include_all" value="1" id="includeAll"
-              {% if request.GET.include_all %}checked{% endif %}>
-        <label class="form-check-label" for="includeAll">
-          Show non-active
-        </label>
-      </div>
-    </form>
-
+    <div>
+      <label class="cat-filter-label">Mode</label>
+      <select name="mode" class="cat-filter-select">
+        <option value="">All</option>
+        {% for value, label in filter.form.fields.mode.choices %}
+          {% if value %}
+            <option value="{{ value }}" {% if filter.form.mode.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
   </div>
+
+  <div class="cat-filter-footer">
+    <label class="cat-check">
+      <input type="checkbox" name="include_all" value="1"
+             {% if request.GET.include_all %}checked{% endif %}>
+      Show non-active
+    </label>
+    <div class="cat-filter-actions">
+      <a class="cat-btn-reset" href="{% url 'mdu:catalog' %}">Reset</a>
+      <button class="cat-btn-apply" type="submit">Apply</button>
+    </div>
+  </div>
+
+</div>
+</form>
+
+{# ====== Data table (manual render for full Figma control) ====== #}
+<div class="cat-table-wrap">
+  <table class="cat-table">
+    <thead>
+      <tr>
+        <th>Reference Name</th>
+        <th>Description</th>
+        <th>Type</th>
+        <th>Mode</th>
+        <th>Lifecycle Status</th>
+        <th>Change Status</th>
+        <th>Workflow</th>
+        <th>Updated At</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in page_obj %}
+        <tr data-href="{% url 'mdu:header_detail' pk=row.pk %}"
+            role="button" tabindex="0"
+            class="clickable-row{% if row.status == 'RETIRED' %} table-secondary{% endif %}">
+
+          <td class="cat-ref-name">{{ row.ref_name }}</td>
+          <td class="cat-desc" title="{{ row.description }}">{{ row.description|truncatechars:40 }}</td>
+          <td class="cat-meta">{{ row.ref_type }}</td>
+          <td class="cat-meta">{{ row.mode }}</td>
+          <td class="cat-meta">{{ row.get_status_display }}</td>
+          <td>
+            {% if row.has_pending %}
+              <span class="cat-badge-review">In review</span>
+            {% else %}
+              <span class="cat-empty">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="cat-meta">{% if row.collaboration_mode == "COLLABORATIVE" %}Collab{% else %}Single{% endif %}</td>
+          <td class="cat-meta">{{ row.updated_at|date:"m/d/Y g a" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No references found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 
-<div class="card shadow-sm">
-  <div class="table-responsive catalog-table-wrap">
-    {% render_table table %}
-  </div>
-</div>
+{# ====== Pagination ====== #}
+{% if page_obj.has_other_pages %}
+<nav class="cat-pagination" aria-label="Catalog pages">
+  <ul class="pagination pagination-sm mb-0">
+    {% if page_obj.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">&laquo;</a>
+      </li>
+    {% endif %}
+
+    {% for p in page_obj.paginator.page_range %}
+      <li class="page-item{% if p == page_obj.number %} active{% endif %}">
+        <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ p }}">{{ p }}</a>
+      </li>
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">&raquo;</a>
+      </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
 
 {% endblock %}
