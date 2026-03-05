@@ -1,18 +1,19 @@
-import json, os, csv, io, re, hashlib
+import json, os, csv, io, re, hashlib, logging
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.utils import timezone
-from django.utils.safestring import mark_safe
 from django.http import FileResponse, Http404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.db.models import Exists, OuterRef, Q
+from django.db import IntegrityError, transaction
 from django.urls import reverse
-from django.db import IntegrityError
 from datetime import timedelta, date
 from django_tables2 import RequestConfig
+
+logger = logging.getLogger(__name__)
 
 from .models import MDUHeader, ChangeRequest, MDUCert
 from .filters import HeaderFilter, ProposedChangeFilter
@@ -307,6 +308,7 @@ def header_detail(request, pk):
             "col_labels": col_labels,
             "export_cols_csv": export_cols_csv,  # <-- use this in Export CSV/JSON links
             "changes": changes,
+            "approved_count": header.changes.filter(status=ChangeRequest.Status.APPROVED).exclude(version__isnull=True).count(),
             "certs": certs,
             "latest_cert": latest_cert,
             "cert_badge": cert_badge,
@@ -676,7 +678,7 @@ def _current_baseline_for_header(header: MDUHeader) -> tuple[str, int | None]:
     return baseline_payload, None
 
 
-@group_required("maker")
+@group_required("maker", "steward")
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
 
@@ -1192,14 +1194,13 @@ def propose_change(request, header_pk):
 
 
 
-                drafts_url = reverse("mdu:proposed_change_list")
-
                 messages.success(
                     request,
-                    mark_safe(
-                        'Draft saved. Review the table, then submit when ready. '
-                        f'To review your drafts, click <a href="{drafts_url}">here</a>.'
-                    )
+                    "Draft saved. Review the table, then submit when ready."
+                )
+                logger.info(
+                    "Draft created: user=%s header=%s change=%s",
+                    request.user.username, header.ref_name, ch.display_id,
                 )
 
                 next_action = request.POST.get("save_next", "stay")
@@ -1768,15 +1769,13 @@ def proposed_change_edit(request, pk):
 
 
 
-                # Link to the list screen (adjust URL name if your project uses a different one)
-                drafts_url = reverse("mdu:proposed_change_list")
-
                 messages.success(
                     request,
-                    mark_safe(
-                        'Draft saved. Review the table, then submit when ready. '
-                        f'To review your drafts, click <a href="{drafts_url}">here</a>.'
-                    )
+                    "Draft saved. Review the table, then submit when ready."
+                )
+                logger.info(
+                    "Draft saved: user=%s header=%s change=%s",
+                    request.user.username, ch.header.ref_name, ch.display_id,
                 )
 
                 # Decide where to go next based on the modal choice
@@ -1836,6 +1835,15 @@ def proposed_change_edit(request, pk):
 def proposed_change_submit(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
 
+    # Ownership check: only creator or collab contributors can submit
+    if ch.header.collaboration_mode == "COLLABORATIVE":
+        is_editor = (ch.created_by_id == request.user.id) or ch.contributors.filter(pk=request.user.pk).exists()
+    else:
+        is_editor = (ch.created_by_id == request.user.id)
+    if not is_editor:
+        messages.error(request, "You do not have permission to submit this draft.")
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
     posted_uuid = (request.POST.get("draft_uuid") or "").strip()
     posted_lock_raw = (request.POST.get("lock_version") or "").strip()
 
@@ -1881,47 +1889,64 @@ def proposed_change_submit(request, pk):
 
     ch.save(update_fields=["status", "submitted_at", "tracking_id", "lock_version", "updated_at"])
     messages.success(request, "Submitted for approval.")
+    logger.info(
+        "Change SUBMITTED: user=%s change=%s header=%s",
+        request.user.username, ch.display_id, ch.header.ref_name,
+    )
     return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
 @require_POST
 @group_required("approver", "business_owner")
 def proposed_change_decide(request, pk, decision):
-    ch = get_object_or_404(ChangeRequest, pk=pk)
-    if ch.status != ChangeRequest.Status.SUBMITTED:
+    # Validate decision parameter early (gap #9)
+    if decision not in ("approve", "reject"):
         raise Http404()
 
     note = (request.POST.get("note") or "").strip()
     if not note:
         messages.error(request, "A decision comment is required.")
-        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+        return redirect("mdu:proposed_change_detail", pk=pk)
 
-    if decision == "approve":
-        ch.status = ChangeRequest.Status.APPROVED
+    with transaction.atomic():
+        # select_for_update prevents two approvers racing (gap #7)
+        ch = get_object_or_404(
+            ChangeRequest.objects.select_for_update(),
+            pk=pk,
+        )
+        if ch.status != ChangeRequest.Status.SUBMITTED:
+            raise Http404()
+
         ch.decided_at = timezone.now()
         ch.decision_note = note
         ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
-        ch.save(update_fields=["status","decided_at","decision_note","decided_by_sid","updated_at"])
 
-        header = ch.header
-        header.last_approved_change = ch
-        header.status = MDUHeader.Status.ACTIVE
-        header.save(update_fields=["last_approved_change","status","updated_at"])
-        messages.success(request, "Approved. You can now generate load files.")
+        if decision == "approve":
+            ch.status = ChangeRequest.Status.APPROVED
+            ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
 
-    elif decision == "reject":
-        ch.status = ChangeRequest.Status.REJECTED
-        ch.decided_at = timezone.now()
-        ch.decision_note = note
-        ch.decided_by_sid = (getattr(request.user, "username", "") or "").strip()
-        ch.save(update_fields=["status","decided_at","decision_note","decided_by_sid","updated_at"])
-        messages.info(request, "Rejected.")
+            header = ch.header
+            header.last_approved_change = ch
+            header.status = MDUHeader.Status.ACTIVE
+            header.save(update_fields=["last_approved_change", "status", "updated_at"])
+            messages.success(request, "Approved. You can now generate load files.")
+            logger.info(
+                "Change APPROVED: user=%s change=%s header=%s",
+                request.user.username, ch.display_id, header.ref_name,
+            )
 
-    else:
-        raise Http404()
+        else:  # reject
+            ch.status = ChangeRequest.Status.REJECTED
+            ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
+            messages.info(request, "Rejected.")
+            logger.info(
+                "Change REJECTED: user=%s change=%s header=%s",
+                request.user.username, ch.display_id, ch.header.ref_name,
+            )
 
     return redirect("mdu:my_approvals")
 
 
+@require_POST
 @group_required("approver", "business_owner")
 def generate_load_files(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)
@@ -1929,9 +1954,17 @@ def generate_load_files(request, pk):
         messages.error(request, "Only approved changes can generate load files.")
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
-    include_cert = request.GET.get("include_cert") == "1"
+    include_cert = request.POST.get("include_cert") == "1"
     zip_path = generate_loader_artifacts(ch.header, ch, include_cert=include_cert)
-    return FileResponse(open(zip_path, "rb"), as_attachment=True, filename=os.path.basename(zip_path))
+    logger.info(
+        "Load files generated: user=%s change=%s header=%s",
+        request.user.username, ch.display_id, ch.header.ref_name,
+    )
+    # Open via context-managed file to prevent handle leaks
+    fh = open(zip_path, "rb")
+    response = FileResponse(fh, as_attachment=True, filename=os.path.basename(zip_path))
+    # FileResponse closes the file when the response is finished streaming.
+    return response
 
 
 @group_required("maker", "steward", "approver")

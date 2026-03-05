@@ -2,212 +2,488 @@
 {% load mdu_extras %}
 {% block title %}My Proposed Changes{% endblock %}
 
+{% block extra_head %}
+<style>
+  /* ── Page header ─────────────────────────────────────────── */
+  .pcl-breadcrumb {
+    font-size: .8rem;
+    color: #2563eb;
+    margin-bottom: .35rem;
+  }
+  .pcl-breadcrumb a { color: #2563eb; text-decoration: none; }
+  .pcl-breadcrumb a:hover { text-decoration: underline; }
+  .pcl-breadcrumb-sep { color: #94a3b8; margin: 0 .35rem; }
+  .pcl-breadcrumb-current { color: #64748b; }
+
+  .pcl-page-label {
+    font-size: .75rem;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    margin-bottom: .2rem;
+  }
+  .pcl-page-title {
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 .2rem;
+    line-height: 1.2;
+  }
+  .pcl-page-sub {
+    font-size: .85rem;
+    color: #64748b;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ── Search bar ──────────────────────────────────────────── */
+  .pcl-search-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: 1.75rem;
+    flex-wrap: wrap;
+  }
+  .pcl-search-label {
+    font-size: .88rem;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+  }
+  .pcl-search-input {
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    padding: .42rem .85rem;
+    font-size: .875rem;
+    color: #111827;
+    background: #f9fafb;
+    min-width: 230px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .pcl-search-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    background: #fff;
+  }
+  .pcl-btn-search {
+    background: #111827;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: .42rem 1.1rem;
+    font-size: .875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .pcl-btn-search:hover { background: #1e293b; }
+  .pcl-btn-reset {
+    background: transparent;
+    color: #2563eb;
+    border: none;
+    font-size: .875rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    padding: .42rem .25rem;
+  }
+  .pcl-btn-reset:hover { text-decoration: underline; }
+
+  /* ── Section card ────────────────────────────────────────── */
+  .pcl-section {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    overflow: hidden;
+  }
+
+  .pcl-section summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .85rem 1.4rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    transition: background .12s;
+  }
+  .pcl-section summary:hover { background: #f1f5f9; }
+  .pcl-section summary::-webkit-details-marker { display: none; }
+  /* hide native marker in Firefox */
+  .pcl-section summary::marker { display: none; }
+
+  .pcl-section-title {
+    font-weight: 700;
+    font-size: .92rem;
+    color: #0f172a;
+  }
+  .pcl-section-count {
+    font-weight: 400;
+    font-size: .85rem;
+    color: #64748b;
+    margin-left: 4px;
+  }
+  .pcl-chevron {
+    width: 18px;
+    height: 18px;
+    color: #94a3b8;
+    transition: transform .2s;
+    flex-shrink: 0;
+  }
+  .pcl-section[open] .pcl-chevron { transform: rotate(180deg); }
+
+  /* ── Section body ────────────────────────────────────────── */
+  .pcl-section-body { padding: 1.1rem 1.4rem 1.4rem; }
+
+  .pcl-help {
+    font-size: .84rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+
+  /* ── Table ───────────────────────────────────────────────── */
+  .pcl-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  .pcl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .855rem;
+  }
+  .pcl-table thead tr {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .pcl-table th {
+    padding: .65rem 1rem;
+    text-align: left;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #475569;
+    letter-spacing: .03em;
+    white-space: nowrap;
+  }
+  .pcl-table td {
+    padding: .72rem 1rem;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+  .pcl-table tbody tr:last-child td { border-bottom: none; }
+  .pcl-table tbody tr:hover { background: #f8fafc; }
+  .pcl-table tbody tr.clickable-row { cursor: pointer; }
+
+  /* Display ID link style */
+  .pcl-id-link {
+    color: #2563eb;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .pcl-id-link:hover { text-decoration: underline; }
+
+  .pcl-cell-meta { color: #475569; }
+  .pcl-cell-empty { color: #94a3b8; }
+
+  /* Drifted row */
+  .pcl-drifted td { background: rgba(251,191,36,.05); }
+  .pcl-drifted:hover td { background: rgba(251,191,36,.09) !important; }
+
+  /* ── Badges ──────────────────────────────────────────────── */
+  .pcl-badge {
+    display: inline-block;
+    padding: .18rem .6rem;
+    border-radius: 4px;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+  .pcl-badge-success {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+  .pcl-badge-warning {
+    background: #fef9c3;
+    color: #a16207;
+    border: 1px solid #fde68a;
+  }
+  .pcl-badge-danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+  .pcl-badge-neutral {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+  .pcl-badge-approved {
+    color: #2563eb;
+    font-weight: 500;
+    font-size: .855rem;
+  }
+  .pcl-badge-sub { display: block; font-size: .73rem; color: #94a3b8; margin-top: 2px; font-weight: 400; }
+
+  /* ── Footer actions ──────────────────────────────────────── */
+  .pcl-bulk-row {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    margin-top: 1rem;
+    padding-top: .85rem;
+    border-top: 1px solid #f1f5f9;
+  }
+  .pcl-btn-danger {
+    background: transparent;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    padding: .38rem .9rem;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .pcl-btn-danger:hover { border-color: #94a3b8; color: #374151; }
+  .pcl-bulk-hint { font-size: .8rem; color: #94a3b8; }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .pcl-empty {
+    font-size: .875rem;
+    color: #64748b;
+    padding: .5rem 0;
+  }
+
+  /* ── Divider between sections ────────────────────────────── */
+  .pcl-divider { height: .75rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <div>
-    <h3 class="mb-0">My Proposed Changes</h3>
-    <div class="text-muted">Drafts, submissions, and decision history.</div>
-  </div>
-</div>
 
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <form method="get" class="row g-2 align-items-end">
-      <div class="col-md-8">
-        <label class="form-label mb-1">Search</label>
-        <input class="form-control" name="q" value="{{ q|default:'' }}" placeholder="Search by Display ID or Reference Name">
-      </div>
-      <div class="col-md-4 d-flex gap-2">
-        <button class="btn btn-primary w-100" type="submit">Search</button>
-        <a class="btn btn-outline-secondary w-100" href="{% url 'mdu:proposed_change_list' %}">Reset</a>
-      </div>
-    </form>
-  </div>
-</div>
+<!-- Page header -->
+<div class="pcl-page-label">Proposed Changes</div>
+<h1 class="pcl-page-title">My Proposed Changes</h1>
+<p class="pcl-page-sub">Drafts, submissions, and decision history.</p>
+
+<!-- Search bar -->
+<form method="get" class="pcl-search-row">
+  <span class="pcl-search-label">Search</span>
+  <input class="pcl-search-input" name="q" value="{{ q|default:'' }}" placeholder="Search by Display ID or Reference Name">
+  <button class="pcl-btn-search" type="submit">Search</button>
+  <a class="pcl-btn-reset" href="{% url 'mdu:proposed_change_list' %}">Reset</a>
+</form>
 
 
-{# --- Drafts --- #}
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <div>
-        <h5 class="mb-0">Drafts</h5>
-        <div class="text-muted small">Drafts are editable only when aligned to the latest approved baseline.</div>
-      </div>
-    </div>
+<!-- ══════════════════════════════════════════
+     Drafts
+═══════════════════════════════════════════ -->
+<details class="pcl-section" open>
+  <summary>
+    <span class="pcl-section-title">Drafts <span class="pcl-section-count">({{ drafts|length }})</span></span>
+    <svg class="pcl-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+  </summary>
+  <div class="pcl-section-body">
+
+    <p class="pcl-help">Drafts are editable only when aligned to the latest approved baseline.</p>
 
     {% if drafts %}
-      <form method="post" action="{% url 'mdu:draft_bulk_delete' %}">
-        {% csrf_token %}
+    <form method="post" action="{% url 'mdu:draft_bulk_delete' %}">
+      {% csrf_token %}
+      <div class="pcl-table-wrap">
+        <table class="pcl-table">
+          <thead>
+            <tr>
+              <th style="width:2%;"></th>
+              <th>Display ID</th>
+              <th>Reference</th>
+              <th>Workflow</th>
+              <th>Author</th>
+              <th>Collab Sign-Off</th>
+              <th>Validity</th>
+              <th>Created</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in drafts %}
+            <tr data-href="{% url 'mdu:proposed_change_detail' pk=d.pk %}"
+                role="button" tabindex="0"
+                class="clickable-row {% if d.pk in drifted_ids %}pcl-drifted{% endif %}">
 
-        <div class="table-responsive">
-          <table class="table table-hover align-middle mdu-table">
-            <thead>
-              <tr>
-                <th class="mdu-col-min"></th>
-                <th class="text-nowrap">Display ID</th>
-                <th class="text-nowrap">Reference</th>
-                <th class="text-nowrap">Workflow</th>
-                <th class="text-nowrap">Author</th>
-                <th class="text-nowrap">Collaborator Sign-Off</th>
-                <th class="text-nowrap">Validity</th>
-                <th class="text-nowrap">Created At</th>
-                <th class="text-nowrap">Updated At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for d in drafts %}
-                  <tr
-                    data-href="{% url 'mdu:proposed_change_detail' pk=d.pk %}"
-                    role="button"
-                    tabindex="0"
-                    class="clickable-row {% if d.pk in drifted_ids %}table-warning{% endif %}">
+              <td>
+                {% if d.pk in drifted_ids %}
+                  <input class="form-check-input" type="checkbox" name="draft_ids" value="{{ d.pk }}" aria-label="Select drifted draft" onclick="event.stopPropagation();">
+                {% else %}
+                  <span class="pcl-cell-empty">&mdash;</span>
+                {% endif %}
+              </td>
 
-                    <td class="text-nowrap">
-                      {% if d.pk in drifted_ids %}
-                        <input class="form-check-input" type="checkbox" name="draft_ids" value="{{ d.pk }}" aria-label="Select drifted draft">
-                      {% else %}
-                        <span class="text-muted">—</span>
-                      {% endif %}
-                    </td>
+              <td>
+                <a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" onclick="event.stopPropagation();">{{ d.display_id }}</a>
+                {% if d.created_by and d.created_by != user %}
+                  <span class="pcl-badge-sub">Shared &middot; {{ d.created_by.username }}</span>
+                {% endif %}
+              </td>
 
-                    <td class="text-nowrap">
-                      <div class="fw-semibold">{{ d.display_id }}</div>
-                      {% if d.created_by and d.created_by != user %}
-                        <div class="text-muted small">Shared draft · Created by {{ d.created_by.username }}</div>
-                      {% endif %}
-                    </td>
+              <td class="pcl-cell-meta">{{ d.header.ref_name }}</td>
+              <td class="pcl-cell-meta">{{ d.ref_kind_label }}</td>
+              <td class="pcl-cell-meta">{{ d.author_label }}</td>
+              <td class="pcl-cell-meta">{{ d.maker2_status_label }}</td>
 
-                    <td class="text-nowrap">{{ d.header.ref_name }}</td>
+              <td>
+                {% if d.pk in drifted_ids %}
+                  <span class="pcl-badge pcl-badge-warning">Drifted</span>
+                  <span class="pcl-badge-sub">View only</span>
+                {% else %}
+                  <span class="pcl-badge pcl-badge-success">Aligned</span>
+                  <span class="pcl-badge-sub">Editable</span>
+                {% endif %}
+              </td>
 
-                    <td class="text-nowrap">{{ d.ref_kind_label }}</td>
+              <td class="pcl-cell-meta">{{ d.created_at|date:"M d, Y g:i a" }}</td>
+              <td class="pcl-cell-meta">{{ d.updated_at|date:"M d, Y g:i a" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
 
-                    <td class="text-nowrap">{{ d.author_label }}</td>
-
-                    <td class="text-nowrap">{{ d.maker2_status_label }}</td>
-
-                    <td class="text-nowrap">
-                      {% if d.pk in drifted_ids %}
-                        <span class="badge text-bg-warning">Drifted From Baseline</span>
-                        <div class="text-muted small">View-only · delete &amp; recreate to submit</div>
-                      {% else %}
-                        <span class="badge text-bg-success">Aligned</span>
-                        <div class="text-muted small">Editable</div>
-                      {% endif %}
-                    </td>
-
-                    <td class="text-nowrap">{{ d.created_at|date:"Y-m-d H:i" }}</td>
-
-                    <td class="text-nowrap">{{ d.updated_at|date:"Y-m-d H:i" }}</td>
-                  </tr>
-{% endfor %}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-outline-danger">Delete Selected Drifted Drafts</button>
-          <div class="text-muted small align-self-center">Only drifted drafts can be bulk deleted from here.</div>
-        </div>
-      </form>
+      <div class="pcl-bulk-row">
+        <button type="submit" class="pcl-btn-danger">Delete Selected Drifted Drafts</button>
+        <span class="pcl-bulk-hint">Only drifted drafts can be bulk deleted.</span>
+      </div>
+    </form>
     {% else %}
-      <div class="text-muted">No drafts found.</div>
+      <div class="pcl-empty">No drafts found.</div>
     {% endif %}
+
   </div>
-</div>
+</details>
 
 
-{# --- Submitted --- #}
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <h5 class="mb-0">Submitted</h5>
-    <div class="text-muted small mb-2">Waiting for a decision.</div>
+<!-- ══════════════════════════════════════════
+     Submitted
+═══════════════════════════════════════════ -->
+<details class="pcl-section" open>
+  <summary>
+    <span class="pcl-section-title">Submitted <span class="pcl-section-count">({{ submitted|length }})</span></span>
+    <svg class="pcl-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+  </summary>
+  <div class="pcl-section-body">
+
+    <p class="pcl-help">Waiting for a decision.</p>
 
     {% if submitted %}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mdu-table">
-          <thead>
-            <tr>
-              <th class="text-nowrap">Display ID</th>
-              <th class="text-nowrap">Reference</th>
-                <th class="text-nowrap">Workflow</th>
-                <th class="text-nowrap">Author</th>
-                <th class="text-nowrap">Collaborator Sign-Off</th>
-              <th class="text-nowrap">Submitted At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for s in submitted %}
-              <tr data-href="{% url 'mdu:proposed_change_detail' pk=s.pk %}" role="button" tabindex="0" class="clickable-row">
-                <td class="text-nowrap">
-                  <div class="fw-semibold">{{ s.display_id }}</div>
-                </td>
-                <td class="text-nowrap">{{ s.header.ref_name }}</td>
-                <td class="text-nowrap">{{ s.ref_kind_label }}</td>
-                <td class="text-nowrap">{{ s.author_label }}</td>
-                <td class="text-nowrap">{{ s.maker2_status_label }}</td>
-                <td class="text-nowrap">{{ s.submitted_at|date:"Y-m-d H:i"|default:"—" }}</td>
-              </tr>
-{% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <div class="pcl-table-wrap">
+      <table class="pcl-table">
+        <thead>
+          <tr>
+            <th>Display ID</th>
+            <th>Reference</th>
+            <th>Workflow</th>
+            <th>Author</th>
+            <th>Collab Sign-Off</th>
+            <th>Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in submitted %}
+          <tr data-href="{% url 'mdu:proposed_change_detail' pk=s.pk %}" role="button" tabindex="0" class="clickable-row">
+            <td><a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=s.pk %}" onclick="event.stopPropagation();">{{ s.display_id }}</a></td>
+            <td class="pcl-cell-meta">{{ s.header.ref_name }}</td>
+            <td class="pcl-cell-meta">{{ s.ref_kind_label }}</td>
+            <td class="pcl-cell-meta">{{ s.author_label }}</td>
+            <td class="pcl-cell-meta">{{ s.maker2_status_label }}</td>
+            <td class="pcl-cell-meta">{{ s.submitted_at|date:"M d, Y g:i a"|default:"&mdash;" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
-      <div class="text-muted">No submitted changes found.</div>
+      <p class="pcl-help" style="margin-bottom:0;">No submitted changes found.</p>
     {% endif %}
+
   </div>
-</div>
+</details>
 
 
-{# --- Decisioned --- #}
-<div class="card shadow-sm">
-  <div class="card-body">
-    <h5 class="mb-0">Decisioned</h5>
-    <div class="text-muted small mb-2">Approved or rejected history.</div>
+<!-- ══════════════════════════════════════════
+     Decisioned
+═══════════════════════════════════════════ -->
+<details class="pcl-section">
+  <summary>
+    <span class="pcl-section-title">Decisioned <span class="pcl-section-count">({{ decisioned|length }})</span></span>
+    <svg class="pcl-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+  </summary>
+  <div class="pcl-section-body">
+
+    <p class="pcl-help">Approved or rejected history.</p>
 
     {% if decisioned %}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mdu-table">
-          <thead>
-            <tr>
-              <th class="text-nowrap">Display ID</th>
-              <th class="text-nowrap">Reference</th>
-                <th class="text-nowrap">Workflow</th>
-                <th class="text-nowrap">Author</th>
-                <th class="text-nowrap">Collaborator Sign-Off</th>
-              <th class="text-nowrap">Final Status</th>
-              <th class="text-nowrap">Decided At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for d in decisioned %}
-              <tr data-href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" role="button" tabindex="0" class="clickable-row">
-                <td class="text-nowrap">
-                  <div class="fw-semibold">{{ d.display_id }}</div>
-                </td>
-                <td class="text-nowrap">{{ d.header.ref_name }}</td>
-                <td class="text-nowrap">{{ d.ref_kind_label }}</td>
-                <td class="text-nowrap">{{ d.author_label }}</td>
-                <td class="text-nowrap">{{ d.maker2_status_label }}</td>
-                <td class="text-nowrap">
-                  {% if d.status == 'APPROVED' %}
-                    <span class="badge text-bg-success">Approved</span>
-                  {% elif d.status == 'REJECTED' %}
-                    <span class="badge text-bg-danger">Rejected</span>
-                  {% else %}
-                    <span class="badge text-bg-secondary">{{ d.get_status_display }}</span>
-                  {% endif %}
-                </td>
-                <td class="text-nowrap">{{ d.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
-              </tr>
-{% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <div class="pcl-table-wrap">
+      <table class="pcl-table">
+        <thead>
+          <tr>
+            <th>Display ID</th>
+            <th>Reference</th>
+            <th>Workflow</th>
+            <th>Author</th>
+            <th>Collab Sign-Off</th>
+            <th>Final Status</th>
+            <th>Decided</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in decisioned %}
+          <tr data-href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" role="button" tabindex="0" class="clickable-row">
+            <td><a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" onclick="event.stopPropagation();">{{ d.display_id }}</a></td>
+            <td class="pcl-cell-meta">{{ d.header.ref_name }}</td>
+            <td class="pcl-cell-meta">{{ d.ref_kind_label }}</td>
+            <td class="pcl-cell-meta">{{ d.author_label }}</td>
+            <td class="pcl-cell-meta">{{ d.maker2_status_label }}</td>
+            <td>
+              {% if d.status == 'APPROVED' %}
+                <span class="pcl-badge-approved">Approved</span>
+              {% elif d.status == 'REJECTED' %}
+                <span class="pcl-badge pcl-badge-danger">Rejected</span>
+              {% else %}
+                <span class="pcl-badge pcl-badge-neutral">{{ d.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="pcl-cell-meta">{{ d.decided_at|date:"M d, Y g:i a"|default:"&mdash;" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
-      <div class="text-muted">No decisioned changes found.</div>
+      <p class="pcl-help" style="margin-bottom:0;">No decisioned changes found.</p>
     {% endif %}
+
   </div>
-</div>
+</details>
+
+<script>
+  // Clickable rows — navigate on click but not if user clicked a link/checkbox
+  document.querySelectorAll('tr[data-href]').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('a, input, button')) return;
+      window.location.href = row.dataset.href;
+    });
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter') window.location.href = row.dataset.href;
+    });
+  });
+</script>
 
 {% endblock %}

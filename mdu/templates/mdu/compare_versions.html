@@ -2,29 +2,188 @@
 {% load mdu_extras %}
 {% block title %}Compare Versions | {{ header.ref_name }}{% endblock %}
 
-{% block content %}
-<div class="container py-3">
-  <h3 class="mb-1">Compare versions</h3>
-  <div class="text-muted mb-3">{{ header.ref_name }}</div>
+{% block extra_head %}
+<style>
+  /* ── Page header ─────────────────────────────────────────── */
+  .cv-breadcrumb { font-size: .8rem; color: #2563eb; margin-bottom: .35rem; }
+  .cv-breadcrumb a { color: #2563eb; text-decoration: none; }
+  .cv-breadcrumb a:hover { text-decoration: underline; }
+  .cv-breadcrumb-sep { color: #94a3b8; margin: 0 .35rem; }
+  .cv-page-label { font-size: .75rem; color: #64748b; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; margin-bottom: .2rem; }
+  .cv-page-title { font-size: 1.55rem; font-weight: 700; color: #0f172a; margin: 0 0 .2rem; line-height: 1.2; }
+  .cv-page-sub { font-size: .85rem; color: #64748b; margin-bottom: 1.5rem; }
 
-  <form method="get" class="card shadow-sm mb-3">
-    <div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-12 col-md-4">
-          <label class="form-label small text-muted mb-1">Left version</label>
-          <select name="v1" class="form-select">
+  /* ── Section card ────────────────────────────────────────── */
+  .cv-section {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    overflow: hidden;
+  }
+  .cv-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .85rem 1.4rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .cv-section-title { font-weight: 700; font-size: .92rem; color: #0f172a; }
+  .cv-section-body { padding: 1.1rem 1.4rem 1.4rem; }
+
+  /* ── Version selector form ───────────────────────────────── */
+  .cv-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: .75rem;
+    align-items: end;
+  }
+  @media (max-width: 640px) { .cv-form-grid { grid-template-columns: 1fr; } }
+  .cv-label { font-size: .78rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; display: block; }
+  .cv-select {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    padding: .42rem .75rem;
+    font-size: .875rem;
+    color: #111827;
+    background: #f9fafb;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cv-select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); background: #fff; }
+  .cv-btn-row { display: flex; gap: .5rem; align-items: center; }
+  .cv-btn-primary {
+    background: #111827; color: #fff; border: none; border-radius: 5px;
+    padding: .42rem 1.1rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+    transition: background .15s;
+  }
+  .cv-btn-primary:hover { background: #1e293b; }
+  .cv-btn-secondary {
+    background: #fff; color: #374151; border: 1px solid #d1d5db; border-radius: 5px;
+    padding: .42rem .9rem; font-size: .875rem; font-weight: 500; cursor: pointer;
+    text-decoration: none; transition: border-color .15s;
+  }
+  .cv-btn-secondary:hover { border-color: #94a3b8; }
+
+  /* ── View toggle bar (matches proposed_change_detail) ────── */
+  .cv-view-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .5rem;
+    margin-bottom: 1rem;
+  }
+  .cv-view-hint { font-size: .84rem; color: #64748b; }
+  .cv-controls { display: flex; gap: .6rem; align-items: center; }
+
+  .cv-toggle {
+    display: inline-flex;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .cv-toggle a {
+    display: inline-block;
+    padding: .38rem .9rem;
+    font-size: .82rem;
+    font-weight: 500;
+    color: #374151;
+    text-decoration: none;
+    border-right: 1px solid #e2e8f0;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+  }
+  .cv-toggle a:last-child { border-right: none; }
+  .cv-toggle a:hover { background: #f8fafc; }
+  .cv-toggle a.active { background: #111827; color: #fff; font-weight: 600; }
+
+  .cv-diff-link {
+    font-size: .82rem; font-weight: 500; color: #2563eb;
+    text-decoration: none; white-space: nowrap;
+  }
+  .cv-diff-link:hover { text-decoration: underline; }
+
+  /* ── Diff table ──────────────────────────────────────────── */
+  .cv-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: auto;
+    max-height: 65vh;
+  }
+  .cv-table { width: 100%; border-collapse: collapse; font-size: .855rem; }
+  .cv-table thead tr {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .cv-table th {
+    padding: .65rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+  }
+  .cv-th-tech { display: block; font-size: .7rem; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: .03em; }
+  .cv-th-biz  { display: block; font-size: .78rem; font-weight: 600; color: #475569; }
+  .cv-table td {
+    padding: .65rem 1rem;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+  .cv-table tbody tr:last-child td { border-bottom: none; }
+  .cv-table tbody tr:hover { background: #f8fafc; }
+  .cv-cell-meta { color: #475569; }
+
+  .cv-op { font-size: .855rem; color: #475569; }
+  .cv-op-insert { color: #15803d; font-weight: 600; }
+  .cv-op-update { color: #a16207; font-weight: 600; }
+  .cv-op-retire  { color: #b91c1c; font-weight: 600; }
+
+  .cv-cell-changed { background: rgba(251,191,36,.08); }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .cv-empty { font-size: .875rem; color: #64748b; padding: .25rem 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="cv-page-label">Reference Data</div>
+<h1 class="cv-page-title">Compare Versions</h1>
+<p class="cv-page-sub">{{ header.ref_name }}</p>
+
+
+<!-- ── Version selector ──────────────────────────────────── -->
+<div class="cv-section">
+  <div class="cv-section-header">
+    <span class="cv-section-title">Select Versions</span>
+  </div>
+  <div class="cv-section-body">
+    <form method="get">
+      <div class="cv-form-grid">
+        <div>
+          <label class="cv-label">Left version</label>
+          <select name="v1" class="cv-select" id="cv-v1">
             <option value="">Select…</option>
             {% for c in approved %}
-              <option value="{{ c.version }}" {% if left and c.version == left.version %}selected{% endif %}>
+              <option value="{{ c.version }}"
+                {% if left and c.version == left.version %}selected
+                {% elif not left and forloop.first %}selected
+                {% endif %}>
                 v{{ c.version }} — {{ c.display_id }}
               </option>
             {% endfor %}
           </select>
         </div>
 
-        <div class="col-12 col-md-4">
-          <label class="form-label small text-muted mb-1">Right version</label>
-          <select name="v2" class="form-select">
+        <div>
+          <label class="cv-label">Right version</label>
+          <select name="v2" class="cv-select" id="cv-v2">
             <option value="">Select…</option>
             {% for c in approved %}
               <option value="{{ c.version }}" {% if right and c.version == right.version %}selected{% endif %}>
@@ -34,22 +193,177 @@
           </select>
         </div>
 
-        <div class="col-12 col-md-4 d-flex gap-2">
-          <button class="btn btn-primary" type="submit">Compare</button>
-          <a class="btn btn-outline-secondary" href="{% url 'mdu:header_detail' header.pk %}">Back</a>
+        <div class="cv-btn-row">
+          <button class="cv-btn-primary" type="submit">Compare</button>
+          <a class="cv-btn-secondary" href="{% url 'mdu:header_detail' header.pk %}">Back</a>
         </div>
       </div>
-    </div>
-  </form>
+    </form>
+  </div>
+</div>
 
-  {% if diff_rows %}
-    <div class="card shadow-sm">
-      <div class="card-body">
-        {% include "mdu/partials/change_diff.html" %}
+
+<!-- ── Diff results ───────────────────────────────────────── -->
+{% if left and right and diff_rows is not None %}
+<div class="cv-section">
+  <div class="cv-section-header">
+    <span class="cv-section-title">Approved vs Proposed</span>
+  </div>
+  <div class="cv-section-body">
+
+    <div class="cv-view-bar">
+      <span class="cv-view-hint">Comparing v{{ left.version }} ({{ left.display_id }}) vs v{{ right.version }} ({{ right.display_id }}).</span>
+      <div class="cv-controls">
+        <div class="cv-toggle">
+          <a href="?v1={{ left.version }}&v2={{ right.version }}&view=all&format={{ diff_format|default:'clean' }}"
+             class="{% if view_mode == 'all' or not view_mode %}active{% endif %}">All Rows ({{ diff_rows|length }})</a>
+          <a href="?v1={{ left.version }}&v2={{ right.version }}&view=changes&format={{ diff_format|default:'clean' }}"
+             class="{% if view_mode == 'changes' %}active{% endif %}">Changes Only ({{ changed_count|default:0 }})</a>
+        </div>
+        <a class="cv-diff-link"
+           href="?v1={{ left.version }}&v2={{ right.version }}&view={{ view_mode|default:'all' }}&format={% if diff_format == 'diff' %}clean{% else %}diff{% endif %}">
+          {% if diff_format == 'diff' %}Hide Differences{% else %}Show Differences{% endif %}
+        </a>
       </div>
     </div>
-  {% else %}
-    <div class="text-muted">Pick two approved versions to compare.</div>
-  {% endif %}
+
+    <div class="cv-table-wrap">
+      <table class="cv-table">
+        <thead>
+          <tr>
+            <th>Row Type</th>
+            <th>Operation</th>
+            <th>Change Comment</th>
+            {% if show_effective_dates %}
+              <th>Start</th>
+              <th>End</th>
+            {% endif %}
+            {% for c in diff_cols %}
+              <th>
+                <span class="cv-th-tech">{{ c.tech }}</span>
+                <span class="cv-th-biz">{{ c.biz }}</span>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in diff_rows %}
+            <tr>
+              <td class="cv-cell-meta">{{ r.row_type }}</td>
+              <td>
+                {% if r.operation == 'INSERT ROW' %}
+                  <span class="cv-op cv-op-insert">{{ r.operation }}</span>
+                {% elif r.operation == 'UPDATE ROW' %}
+                  <span class="cv-op cv-op-update">{{ r.operation }}</span>
+                {% elif r.operation == 'RETIRE ROW' %}
+                  <span class="cv-op cv-op-retire">{{ r.operation }}</span>
+                {% else %}
+                  <span class="cv-op">{{ r.operation }}</span>
+                {% endif %}
+              </td>
+              <td class="cv-cell-meta">
+                {% if r.change_comment %}
+                  <span style="max-width:240px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                        title="{{ r.change_comment }}">{{ r.change_comment }}</span>
+                {% endif %}
+              </td>
+              {% if show_effective_dates %}
+                <td class="cv-cell-meta">{{ r.start_dt|default:"" }}</td>
+                <td class="cv-cell-meta">{{ r.end_dt|default:"" }}</td>
+              {% endif %}
+              {% for cell in r.cells %}
+                <td class="{% if cell.changed %}cv-cell-changed{% endif %}">
+                  {% if diff_format == 'diff' %}
+                    {% if cell.changed %}
+                      {% if r.is_insert %}
+                        <div class="mdu-after">{{ cell.after|default:"&mdash;" }}</div>
+                      {% elif r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                        <div class="mdu-retire-value">{{ cell.after|default:"" }}</div>
+                      {% else %}
+                        <div class="mdu-before">{{ cell.before|default:"&mdash;" }}</div>
+                        <div class="mdu-after">{{ cell.after|default:"&mdash;" }}</div>
+                      {% endif %}
+                    {% else %}
+                      {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                        <span class="mdu-retire-value">{{ cell.after|default:"" }}</span>
+                      {% else %}
+                        {{ cell.after|default:"" }}
+                      {% endif %}
+                    {% endif %}
+                  {% else %}
+                    {% if cell.changed %}
+                      {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                        <div class="mdu-retire-value">{{ cell.after|default:"&mdash;" }}</div>
+                      {% else %}
+                        <div class="mdu-after">{{ cell.after|default:"&mdash;" }}</div>
+                      {% endif %}
+                    {% else %}
+                      {% if r.operation == 'RETIRE ROW' and r.row_type|lower == 'values' %}
+                        <span class="mdu-retire-value">{{ cell.after|default:"" }}</span>
+                      {% else %}
+                        {{ cell.after|default:"" }}
+                      {% endif %}
+                    {% endif %}
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
 </div>
+
+{% else %}
+  {% if left and right and not diff_rows %}
+    <div class="cv-empty">No differences found between the selected versions.</div>
+  {% elif approved|length < 2 %}
+    {# Handled by redirect in view — fallback message if reached #}
+    <div class="cv-empty">At least two approved versions are required to compare.</div>
+  {% else %}
+    <div class="cv-empty">Select two different versions above and click Compare.</div>
+  {% endif %}
+{% endif %}
+
+<script>
+(function () {
+  const v1 = document.querySelector('select[name="v1"]');
+  const v2 = document.querySelector('select[name="v2"]');
+  const form = v1 && v1.closest('form');
+
+  function disableDuplicates() {
+    const selected1 = v1.value;
+    const selected2 = v2.value;
+    // Re-enable all options first
+    [...v1.options].forEach(o => o.disabled = false);
+    [...v2.options].forEach(o => o.disabled = false);
+    // Disable matching option in the other select
+    if (selected1) {
+      [...v2.options].forEach(o => { if (o.value === selected1) o.disabled = true; });
+    }
+    if (selected2) {
+      [...v1.options].forEach(o => { if (o.value === selected2) o.disabled = true; });
+    }
+  }
+
+  if (v1 && v2) {
+    v1.addEventListener('change', disableDuplicates);
+    v2.addEventListener('change', disableDuplicates);
+    disableDuplicates(); // run on page load to enforce current selections
+
+    // Prevent form submit if same version selected
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        if (v1.value && v2.value && v1.value === v2.value) {
+          e.preventDefault();
+          alert('Please select two different versions to compare.');
+        }
+      });
+    }
+  }
+})();
+</script>
+
 {% endblock %}

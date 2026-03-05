@@ -3,12 +3,15 @@ import io
 import json
 import re
 
+from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .models import MDUHeader, ChangeRequest
+from .permissions import group_required
 from .services import payload_rows
 
 
@@ -68,6 +71,7 @@ def _normalize_csv_headers(fieldnames):
     return display_to_tech, tech_names
 
 
+@group_required("maker", "steward", "approver")
 def download_bulk_template_csv(request, header_pk):
     """
     CSV template for bulk insert. Header uses technical names plus human hints:
@@ -102,15 +106,26 @@ def download_bulk_template_csv(request, header_pk):
     return resp
 
 
+@require_POST
+@group_required("maker")
 def bulk_upload_csv(request, pk):
     """
-    Legacy endpoint (kept for deep links): append INSERT rows from uploaded CSV into a DRAFT.
+    Append INSERT rows from uploaded CSV into a DRAFT.
     Supports hinted headers like 'string_01 (Country Code)'.
     """
     ch = get_object_or_404(ChangeRequest, pk=pk)
 
     if ch.status != ChangeRequest.Status.DRAFT:
         messages.error(request, "Bulk Upload Is Only Allowed For Draft Changes.")
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+
+    # Ownership check: only draft creator or collab contributors can upload
+    if ch.header.collaboration_mode == "COLLABORATIVE":
+        is_editor = (ch.created_by_id == request.user.id) or ch.contributors.filter(pk=request.user.pk).exists()
+    else:
+        is_editor = (ch.created_by_id == request.user.id)
+    if not is_editor:
+        messages.error(request, "You do not have permission to upload to this draft.")
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     f = request.FILES.get("bulk_csv")

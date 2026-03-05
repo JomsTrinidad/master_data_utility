@@ -290,6 +290,22 @@
       else el.classList.remove("mdu-dirty");
     }
 
+    // Row-level highlight: add mdu-row-dirty to any tr that has at least one dirty cell.
+    // Deleted rows keep their own styling and are excluded.
+    const allRows = document.querySelectorAll('tr[id^="row-"]');
+    for (const tr of allRows) {
+      const id = tr.getAttribute("id") || "";
+      const m2 = id.match(/^row-(\d+)$/);
+      if (!m2) continue;
+      const rowIndex = parseInt(m2[1], 10);
+      if (isRowDeleted(rowIndex)) {
+        tr.classList.remove("mdu-row-dirty");
+        continue;
+      }
+      const hasDirtyCell = !!tr.querySelector(".mdu-dirty");
+      tr.classList.toggle("mdu-row-dirty", hasDirtyCell);
+    }
+
     updateSubmitState();
   }
 

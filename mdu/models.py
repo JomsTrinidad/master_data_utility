@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import uuid
+import re
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.validators import RegexValidator
+
+
+# Alphanumeric, underscores, hyphens only (no slashes, dots, spaces)
+_safe_name_validator = RegexValidator(
+    regex=r'^[a-zA-Z0-9_\-]+$',
+    message='Only letters, digits, underscores, and hyphens are allowed.',
+)
 
 
 class MDUHeader(models.Model):
@@ -29,7 +38,7 @@ class MDUHeader(models.Model):
         GLOBAL = "GLOBAL", "Global"
         REGIONAL = "REGIONAL", "Regional"
 
-    ref_name = models.CharField(max_length=200, unique=True)
+    ref_name = models.CharField(max_length=200, unique=True, validators=[_safe_name_validator])
     ref_type = models.CharField(max_length=20, default="map")
     mode = models.CharField(max_length=20, default="versioning")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_REVIEW)

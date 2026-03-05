@@ -1,9 +1,19 @@
 import json
 import csv
 import os
+import re
 import zipfile
 from datetime import datetime
 from django.conf import settings
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_filename_part(s: str) -> str:
+    """Strip anything that isn't alphanumeric, underscore, or hyphen."""
+    return re.sub(r"[^a-zA-Z0-9_\-]", "_", s)[:80]
+
 
 def safe_json_loads(text: str):
     try:
@@ -39,7 +49,9 @@ def derive_business_columns(rows):
 def generate_loader_artifacts(header, change, include_cert=False):
     os.makedirs(settings.MDU_ARTIFACTS_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d")
-    base_name = f"authref_{header.ref_type}_{header.ref_name}_{stamp}"
+    safe_type = _sanitize_filename_part(header.ref_type or "unknown")
+    safe_name = _sanitize_filename_part(header.ref_name or "unknown")
+    base_name = f"authref_{safe_type}_{safe_name}_{stamp}_{change.pk}"
 
     rows = payload_rows(change.payload_json)
 
@@ -149,4 +161,12 @@ def generate_loader_artifacts(header, change, include_cert=False):
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for fp in files:
             z.write(fp, arcname=os.path.basename(fp))
+
+    # Clean up intermediate CSVs (only the ZIP needs to survive)
+    for fp in files:
+        try:
+            os.remove(fp)
+        except OSError:
+            logger.warning("Could not remove intermediate artifact: %s", fp)
+
     return zip_path

@@ -149,12 +149,18 @@ def compare_modal(request, pk):
             a = lv[i] if i < len(lv) else {}
             b = rv[i] if i < len(rv) else {}
             cells = []
+            row_changed = False
             for col in biz_cols:
                 tech = col["tech"]
                 av = (a.get(tech) or "").strip()
                 bv = (b.get(tech) or "").strip()
-                cells.append({"before": av, "after": bv, "changed": av != bv})
-            diff_rows.append({"key": f"row:{i+1}", "cells": cells})
+                changed = av != bv
+                if changed:
+                    row_changed = True
+                cells.append({"before": av, "after": bv, "changed": changed})
+            diff_rows.append({"key": f"row:{i+1}", "cells": cells, "row_changed": row_changed})
+
+    changed_count = sum(1 for r in diff_rows if r.get("row_changed"))
 
     return render(
         request,
@@ -167,5 +173,6 @@ def compare_modal(request, pk):
             "right": right,
             "biz_cols": biz_cols,
             "diff_rows": diff_rows,
+            "changed_count": changed_count,
         },
     )

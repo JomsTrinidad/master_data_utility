@@ -166,11 +166,15 @@
 .cat-btn-apply:hover { background: #2d2d4a; }
 
 /* --- Data table --- */
-.cat-table-wrap { overflow-x: auto; }
+.cat-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;   /* outer border */
+  border-radius: 8px;
+}
 
 .cat-table {
   width: 100%;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
 }
 
@@ -178,11 +182,11 @@
   padding: .7rem 1rem;
   font-weight: 600;
   font-size: .8rem;
-  color: #6c757d;
+  color: #0a0a0a9c;
   text-transform: none;
   letter-spacing: 0;
   border-bottom: 1.5px solid rgba(0,0,0,.08);
-  background: transparent;
+  background: #6b8ca828;
   white-space: nowrap;
   text-align: left;
 }
@@ -191,7 +195,7 @@
   padding: .85rem 1rem;
   font-size: .88rem;
   color: #212529;
-  border-bottom: 1px solid rgba(0,0,0,.05);
+  border-bottom: 1px solid  #e2e8f0;;
   vertical-align: middle;
 }
 

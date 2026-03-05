@@ -12,6 +12,32 @@
   {# Your global overrides (after Bootstrap) #}
   <link rel="stylesheet" href="{% static 'mdu/css/app.css' %}?v=20260127-locked-rows">
 
+  <style>
+    /* Active nav link — bright white text + subtle underline indicator */
+    .nav-link-active {
+      color: #fff !important;
+      font-weight: 600;
+      position: relative;
+    }
+    .nav-link-active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: .5rem;
+      right: .5rem;
+      height: 2px;
+      background: rgba(255,255,255,.6);
+      border-radius: 2px;
+    }
+    /* Dim inactive links slightly so active one pops */
+    .navbar-dark .navbar-nav .nav-link:not(.nav-link-active) {
+      color: rgba(255,255,255,.55);
+    }
+    .navbar-dark .navbar-nav .nav-link:not(.nav-link-active):hover {
+      color: rgba(255,255,255,.85);
+    }
+  </style>
+
 
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
@@ -24,7 +50,7 @@
 
 
 
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark" style="position:sticky; top:0; z-index:1030;">
     <div class="container-fluid">
       <a class="navbar-brand" href="{% url 'mdu:catalog' %}">Master Data Utility</a>
 
@@ -35,18 +61,18 @@
 
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:catalog' %}">Catalog</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.path == '/' or request.path == '/catalog/' %}nav-link-active{% endif %}" href="{% url 'mdu:catalog' %}">Catalog</a></li>
           {% if not request.user|in_group:"approver" and not request.user|in_group:"business_owner" %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:proposed_change_list' %}">My Proposed Changes</a></li>
+          <li class="nav-item"><a class="nav-link {% if '/proposed/' in request.path or '/propose/' in request.path %}nav-link-active{% endif %}" href="{% url 'mdu:proposed_change_list' %}">My Proposed Changes</a></li>
           {% endif %}
           {% if request.user|in_group:"approver" or request.user|in_group:"business_owner" %}
-            <li class="nav-item"><a class="nav-link" href="{% url 'mdu:my_approvals' %}">My Approvals</a></li>
+            <li class="nav-item"><a class="nav-link {% if '/approvals/' in request.path %}nav-link-active{% endif %}" href="{% url 'mdu:my_approvals' %}">My Approvals</a></li>
           {% endif %}
           {% if request.user|in_group:"steward" or request.user|in_group:"approver" or request.user|in_group:"business_owner" %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'mdu:cert_list' %}">My Certifications</a></li>
+          <li class="nav-item"><a class="nav-link {% if '/certifications/' in request.path %}nav-link-active{% endif %}" href="{% url 'mdu:cert_list' %}">My Certifications</a></li>
           {% endif %}
 {% if request.user.is_staff %}
-            <li class="nav-item"><a class="nav-link" href="/admin/">Admin</a></li>
+            <li class="nav-item"><a class="nav-link {% if '/admin/' in request.path %}nav-link-active{% endif %}" href="/admin/">Admin</a></li>
           {% endif %}
         </ul>
 

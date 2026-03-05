@@ -1,33 +1,40 @@
 {% load mdu_extras %}
 
-<div class="mb-2">
-  <div class="fw-semibold">{{ header.ref_name }}</div>
-  <div class="text-muted small">Compare two approved versions</div>
+<div style="margin-bottom:.75rem;">
+  <div style="font-size:.78rem; color:#64748b; font-weight:500; text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px;">{{ header.ref_name }}</div>
+  <div style="font-size:.84rem; color:#94a3b8;">Select two approved versions to diff.</div>
 </div>
 
+{% if approved|length < 2 %}
+  <div style="background:#fef9c3; border:1px solid #fde68a; border-radius:6px; padding:.75rem 1rem; font-size:.855rem; color:#a16207;">
+    At least two approved versions are required to compare.
+  </div>
+{% else %}
+
 <form
-  class="border rounded p-2 mb-3 bg-light-subtle"
+  style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:1rem 1.25rem; margin-bottom:1.25rem;"
   hx-get="{% url 'mdu:compare_modal' header.pk %}"
   hx-target="#compare-modal-content"
+  id="cm-form"
 >
-  <div class="row g-2 align-items-end">
-    <div class="col-12 col-md-4">
-      <label class="form-label small text-muted mb-1">Left version</label>
-      <select name="left" class="form-select">
+  <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:.75rem; align-items:end;">
+    <div>
+      <label style="display:block; font-size:.78rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px;">Left version</label>
+      <select name="left" id="cm-left" style="width:100%; border:1px solid #d1d5db; border-radius:5px; padding:.42rem .75rem; font-size:.875rem; color:#111827; background:#fff;">
         {% for c in approved %}
           <option value="{{ c.version }}"
-            {% if left and c.version == left.version %}selected{% endif %}
-            {% if not left and latest_version and c.version == latest_version %}selected{% endif %}
-          >
+            {% if left and c.version == left.version %}selected
+            {% elif not left and latest_version and c.version == latest_version %}selected
+            {% endif %}>
             v{{ c.version }} — {{ c.display_id }}
           </option>
         {% endfor %}
       </select>
     </div>
 
-    <div class="col-12 col-md-4">
-      <label class="form-label small text-muted mb-1">Right version</label>
-      <select name="right" class="form-select">
+    <div>
+      <label style="display:block; font-size:.78rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px;">Right version</label>
+      <select name="right" id="cm-right" style="width:100%; border:1px solid #d1d5db; border-radius:5px; padding:.42rem .75rem; font-size:.875rem; color:#111827; background:#fff;">
         <option value="">Select…</option>
         {% for c in approved %}
           <option value="{{ c.version }}" {% if right and c.version == right.version %}selected{% endif %}>
@@ -37,62 +44,61 @@
       </select>
     </div>
 
-    <div class="col-12 col-md-4 d-flex gap-2">
-      <button class="btn btn-primary" type="submit">Compare</button>
-      <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button>
+    <div>
+      <button type="submit" id="cm-compare-btn"
+              style="background:#111827; color:#fff; border:none; border-radius:5px; padding:.42rem 1.1rem; font-size:.875rem; font-weight:600; cursor:pointer; white-space:nowrap;">
+        Compare
+      </button>
     </div>
   </div>
 </form>
 
-<div class="form-check mb-2">
-  <input class="form-check-input" type="checkbox" id="changedOnlyToggle">
-  <label class="form-check-label small" for="changedOnlyToggle">
-    Show changed rows only
-  </label>
-</div>
+{% if diff_rows is not None and left and right %}
 
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.85rem;">
+    <div style="font-size:.84rem; color:#64748b;">
+      Comparing <strong>v{{ left.version }}</strong> ({{ left.display_id }}) vs <strong>v{{ right.version }}</strong> ({{ right.display_id }})
+    </div>
 
-{% if diff_rows %}
-  <h6 class="mb-2">Differences</h6>
-  <div class="text-muted small mb-2">Left = before, Right = after</div>
+    <!-- All Rows / Changes Only toggle -->
+    <div style="display:inline-flex; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; background:#fff;">
+      <button type="button" id="cm-btn-all"
+              onclick="cmSetView('all')"
+              style="display:inline-block; padding:.32rem .85rem; font-size:.8rem; font-weight:500; border:none; border-right:1px solid #e2e8f0; cursor:pointer; transition:background .12s, color .12s; background:#111827; color:#fff;">
+        All Rows ({{ diff_rows|length }})
+      </button>
+      <button type="button" id="cm-btn-changes"
+              onclick="cmSetView('changes')"
+              style="display:inline-block; padding:.32rem .85rem; font-size:.8rem; font-weight:500; border:none; cursor:pointer; transition:background .12s, color .12s; background:#fff; color:#374151;">
+        Changes Only ({{ changed_count }})
+      </button>
+    </div>
+  </div>
 
-  <div class="diff-table-wrapper">
-    <table class="table table-hover align-middle mdu-table diff-table w-100">
+  <div class="cm-table-wrap">
+    <table class="cm-table">
       <thead>
         <tr>
-        
-
-          <th class="text-nowrap">Row</th>
+          <th style="width:44px;">#</th>
           {% for col in biz_cols %}
-            <th class="text-nowrap">
-              <div class="small text-muted"><em>{{ col.tech }}</em></div>
-              <div>{{ col.biz }}</div>
+            <th>
+              <span style="display:block; font-size:.7rem; font-weight:500; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;">{{ col.tech }}</span>
+              <span style="display:block; font-size:.78rem; font-weight:600; color:#475569;">{{ col.biz }}</span>
             </th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for r in diff_rows %}
-          <tr>
-            <td class="text-nowrap">{{ r.key }}</td>
+          <tr class="{% if not r.row_changed %}cm-row-unchanged{% endif %}">
+            <td style="color:#94a3b8; font-size:.78rem;">{{ forloop.counter }}</td>
             {% for c in r.cells %}
-              <td>
-
-                  <div class="d-flex gap-2 h-100 diff-pair">
-                    <div class="p-2 rounded before-cell flex-fill">
-                      {{ c.before|default:"" }}
-                    </div>
-
-                    <div class="diff-arrow text-muted">→</div>
-
-                    <div class="p-2 rounded after-cell flex-fill">
-                      {{ c.after|default:"" }}
-                    </div>
-                  </div>
-
-
+              <td class="{% if c.changed %}cm-cell-changed{% endif %}">
                 {% if c.changed %}
-                  <div class="small mt-1 text-success">changed</div>
+                  <div class="mdu-before">{{ c.before|default:"&mdash;" }}</div>
+                  <div class="mdu-after">{{ c.after|default:"&mdash;" }}</div>
+                {% else %}
+                  <span style="color:#475569;">{{ c.after|default:"" }}</span>
                 {% endif %}
               </td>
             {% endfor %}
@@ -102,101 +108,113 @@
     </table>
   </div>
 
-  
+{% elif left and right %}
+  <div style="font-size:.875rem; color:#64748b; padding:.5rem 0;">No differences found between the selected versions.</div>
+{% else %}
+  <div style="font-size:.875rem; color:#94a3b8; padding:.5rem 0;">Select a right version and click Compare.</div>
+{% endif %}
+
+{% endif %}{# end approved >= 2 #}
+
 <style>
-  /* ===== WRAPPER CONTROLS SCROLLING ===== */
-  .diff-table-wrapper{
-    max-height: 60vh;
-    overflow: auto;             /* vertical + horizontal scroll in one place */
-    border: 1px solid #dee2e6;
-    background: #fff;
+  .cm-table-wrap {
+    max-height: 55vh;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
   }
-
-  /* ===== TABLE ===== */
-  .diff-table{
-    table-layout: auto;
+  .cm-table {
     width: 100%;
-    min-width: 1200px;
-    border-collapse: separate;
-    border-spacing: 0;
+    border-collapse: collapse;
+    font-size: .855rem;
+    table-layout: auto;
   }
-
-  /* Force the header row to always be visible */
-  .diff-table thead{
-    display: table-header-group; /* <-- this prevents "header disappears" scenarios */
-  }
-
-  /* ===== STICKY HEADER ===== */
-  .diff-table thead th{
+  .cm-table thead tr {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
     position: sticky;
     top: 0;
-    z-index: 10;                /* keep it above cell contents */
-    background: #f8f9fa;
-    box-shadow: inset 0 -2px 0 #dee2e6; /* visible bottom line even when sticky */
+    z-index: 2;
   }
-
-  /* ===== CELLS ===== */
-  .diff-table th,
-  .diff-table td{
-    padding: 0.5rem;
-    vertical-align: top;
+  .cm-table th {
+    padding: .65rem 1rem;
+    text-align: left;
+    /* column width: min ~10ch, max ~25ch, wraps beyond that */
+    min-width: 20ch;
+    max-width: 45ch;
     white-space: normal;
     word-break: break-word;
+    overflow-wrap: break-word;
   }
-
-  /* ===== BEFORE / AFTER PAIR ===== */
-  .diff-pair {
-    display: flex;
-    gap: 0.5rem;
-    align-items: stretch;
+  .cm-table td {
+    padding: .6rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+    /* same width constraints on cells */
+    min-width: 10ch;
+    max-width: 25ch;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
-
-  .before-cell {
-    background-color: #f2f2f2;
-    color: #444;
-    border: 1px solid #d6d6d6;
-    padding: 0.5rem;
-    min-width: 160px;
-    flex: 1 1 0;
-  }
-
-  .after-cell {
-    background-color: #ffffff;
-    color: #111;
-    border: 1px solid #cfcfcf;
-    padding: 0.5rem;
-    min-width: 160px;
-    flex: 1 1 0;
-  }
-
-  .diff-arrow {
-    display: flex;
-    align-items: center;
-    font-weight: 600;
-    white-space: nowrap;
-    color: #888;
-  }
-
-  /* ===== CHANGED-ONLY ===== */
-  .diff-row-unchanged {
-    display: none;
-  }
+  .cm-table tbody tr:last-child td { border-bottom: none; }
+  .cm-table tbody tr:hover td { background: #f8fafc; }
+  .cm-cell-changed { background: rgba(251,191,36,.07); }
+  .cm-row-unchanged { display: none; }
 </style>
 
-
-
 <script>
-  document.addEventListener("change", function (e) {
-    if (e.target.id === "changedOnlyToggle") {
-      document.querySelectorAll(".diff-row-unchanged").forEach(row => {
-        row.style.display = e.target.checked ? "none" : "";
-      });
+(function () {
+  /* ── Prevent same version in both dropdowns ── */
+  var leftSel  = document.getElementById("cm-left");
+  var rightSel = document.getElementById("cm-right");
+  var compareBtn = document.getElementById("cm-compare-btn");
+
+  function syncDropdowns() {
+    if (!leftSel || !rightSel) return;
+    var lv = leftSel.value;
+    var rv = rightSel.value;
+    Array.from(rightSel.options).forEach(function(o) {
+      o.disabled = (o.value !== "" && o.value === lv);
+    });
+    Array.from(leftSel.options).forEach(function(o) {
+      o.disabled = (o.value !== "" && o.value === rv);
+    });
+    /* Disable Compare if right not selected or same as left */
+    if (compareBtn) {
+      compareBtn.disabled = (!rv || rv === lv);
+      compareBtn.style.opacity = compareBtn.disabled ? "0.45" : "1";
+      compareBtn.style.cursor  = compareBtn.disabled ? "not-allowed" : "pointer";
     }
+  }
+
+  if (leftSel)  leftSel.addEventListener("change",  syncDropdowns);
+  if (rightSel) rightSel.addEventListener("change", syncDropdowns);
+  syncDropdowns();
+
+  /* ── All Rows / Changes Only toggle ── */
+  window.cmSetView = function(mode) {
+    var btnAll     = document.getElementById("cm-btn-all");
+    var btnChanges = document.getElementById("cm-btn-changes");
+    var unchanged  = document.querySelectorAll(".cm-row-unchanged");
+
+    var activeStyle   = "background:#111827; color:#fff;";
+    var inactiveStyle = "background:#fff; color:#374151;";
+
+    if (mode === "changes") {
+      unchanged.forEach(function(r) { r.style.display = "none"; });
+      if (btnAll)     btnAll.style.cssText     += inactiveStyle;
+      if (btnChanges) btnChanges.style.cssText += activeStyle;
+    } else {
+      unchanged.forEach(function(r) { r.style.display = ""; });
+      if (btnAll)     btnAll.style.cssText     += activeStyle;
+      if (btnChanges) btnChanges.style.cssText += inactiveStyle;
+    }
+  };
+
+  /* Default: show all rows */
+  document.querySelectorAll(".cm-row-unchanged").forEach(function(r) {
+    r.style.display = "";
   });
+})();
 </script>
-
-
-
-{% else %}
-  <div class="text-muted">Pick a right version to compare against the latest.</div>
-{% endif %}
