@@ -2,6 +2,7 @@
 {% load mdu_extras %}
 {% load static %}
 {% block title %}Propose Change{% endblock %}
+{% block extra_head %}{% if focus_row_index is not None %}<script>document.documentElement.style.visibility="hidden";</script>{% endif %}{% endblock %}
 {% block content %}
 
 

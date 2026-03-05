@@ -24,7 +24,7 @@ from .services import payload_rows, derive_business_columns, generate_loader_art
 
 from .validators import validate_change_request_payload, validate_update_rowids_against_latest_hash
 from .validators import validate_update_rowids_against_latest
-
+from django.core.paginator import Paginator
 
 def _crumb(label, url=None):
     return {"label": label, "url": url}
@@ -347,12 +347,18 @@ def proposed_change_list(request):
 
     drafts = list(my.filter(status=ChangeRequest.Status.DRAFT))
     submitted = list(my.filter(status=ChangeRequest.Status.SUBMITTED, created_by=request.user))
-    decisioned = list(
-        my.filter(
-            status__in=[ChangeRequest.Status.APPROVED, ChangeRequest.Status.REJECTED],
-            created_by=request.user,
-        )
-    )
+
+    decisioned_qs = my.filter(
+        status__in=[ChangeRequest.Status.APPROVED, ChangeRequest.Status.REJECTED],
+        created_by=request.user,
+    ).order_by("-decided_at")
+
+
+    dec_page_number = request.GET.get("dec_page", 1)
+    dec_paginator = Paginator(decisioned_qs, 10)  # ← change 10 to adjust page size
+    decisioned_page = dec_paginator.get_page(dec_page_number)
+
+    
 
     # Drift detection ("baseline changed")
     # - Prefer version compare when available
@@ -402,13 +408,14 @@ def proposed_change_list(request):
 
     drafts = [_decorate(c) for c in drafts]
     submitted = [_decorate(c) for c in submitted]
-    decisioned = [_decorate(c) for c in decisioned]
+    decisioned = [_decorate(c) for c in decisioned_page]
 
     return render(request, "mdu/proposed_change_list.html", {
         "q": q,
         "drafts": drafts,
         "submitted": submitted,
         "decisioned": decisioned,
+        "decisioned_page": decisioned_page,
         "drifted_ids": drifted_ids,
         "breadcrumbs": breadcrumbs,
         **_role_flags(request.user),
@@ -1411,7 +1418,7 @@ def proposed_change_detail(request, pk):
     )
 
     can_edit = False
-    if (ch.status == ChangeRequest.Status.DRAFT) and in_group(request.user, "maker"):
+    if (ch.status == ChangeRequest.Status.DRAFT) and (in_group(request.user, "maker") or in_group(request.user, "steward")):
         baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
         baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
         if ch.version is not None and baseline_version_latest is not None:
@@ -1466,7 +1473,7 @@ def proposed_change_detail(request, pk):
         },
         **_role_flags(request.user)
     })
-@group_required("maker")
+@group_required("maker","steward")
 def proposed_change_edit(request, pk):
     
     ch = get_object_or_404(ChangeRequest, pk=pk)
@@ -1830,7 +1837,7 @@ def proposed_change_edit(request, pk):
 
 
 
-@group_required("maker")
+@group_required("maker", "steward")
 @require_POST
 def proposed_change_submit(request, pk):
     ch = get_object_or_404(ChangeRequest, pk=pk)

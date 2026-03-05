@@ -114,7 +114,6 @@
   }
   .pcl-section summary:hover { background: #f1f5f9; }
   .pcl-section summary::-webkit-details-marker { display: none; }
-  /* hide native marker in Firefox */
   .pcl-section summary::marker { display: none; }
 
   .pcl-section-title {
@@ -181,7 +180,6 @@
   .pcl-table tbody tr:hover { background: #f8fafc; }
   .pcl-table tbody tr.clickable-row { cursor: pointer; }
 
-  /* Display ID link style */
   .pcl-id-link {
     color: #2563eb;
     font-weight: 500;
@@ -192,7 +190,6 @@
   .pcl-cell-meta { color: #475569; }
   .pcl-cell-empty { color: #94a3b8; }
 
-  /* Drifted row */
   .pcl-drifted td { background: rgba(251,191,36,.05); }
   .pcl-drifted:hover td { background: rgba(251,191,36,.09) !important; }
 
@@ -262,7 +259,6 @@
     padding: .5rem 0;
   }
 
-  /* ── Divider between sections ────────────────────────────── */
   .pcl-divider { height: .75rem; }
 </style>
 {% endblock %}
@@ -339,13 +335,11 @@
               <td class="pcl-cell-meta">{{ d.author_label }}</td>
               <td class="pcl-cell-meta">{{ d.maker2_status_label }}</td>
 
-              <td>
+              <td class="pcl-cell-meta">
                 {% if d.pk in drifted_ids %}
-                  <span class="pcl-badge pcl-badge-warning">Drifted</span>
-                  <span class="pcl-badge-sub">View only</span>
+                  Expired - View Only
                 {% else %}
-                  <span class="pcl-badge pcl-badge-success">Aligned</span>
-                  <span class="pcl-badge-sub">Editable</span>
+                  Valid - Editable
                 {% endif %}
               </td>
 
@@ -380,9 +374,8 @@
   </summary>
   <div class="pcl-section-body">
 
-    <p class="pcl-help">Waiting for a decision.</p>
-
     {% if submitted %}
+    <p class="pcl-help">Waiting for a decision.</p>
     <div class="pcl-table-wrap">
       <table class="pcl-table">
         <thead>
@@ -410,7 +403,7 @@
       </table>
     </div>
     {% else %}
-      <p class="pcl-help" style="margin-bottom:0;">No submitted changes found.</p>
+      <div style="text-align:center; padding: 2rem 1rem; color: #8a8a9a;">No submitted changes found.</div>
     {% endif %}
 
   </div>
@@ -420,16 +413,15 @@
 <!-- ══════════════════════════════════════════
      Decisioned
 ═══════════════════════════════════════════ -->
-<details class="pcl-section">
+<details class="pcl-section" id="section-decisioned" {% if request.GET.dec_page %}open{% endif %}>
   <summary>
-    <span class="pcl-section-title">Decisioned <span class="pcl-section-count">({{ decisioned|length }})</span></span>
+    <span class="pcl-section-title">Decisioned <span class="pcl-section-count">({{ decisioned_page.paginator.count }})</span></span>
     <svg class="pcl-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
   </summary>
   <div class="pcl-section-body">
 
-    <p class="pcl-help">Approved or rejected history.</p>
-
     {% if decisioned %}
+    <p class="pcl-help">Approved or rejected history.</p>
     <div class="pcl-table-wrap">
       <table class="pcl-table">
         <thead>
@@ -466,8 +458,31 @@
         </tbody>
       </table>
     </div>
+
+    {% if decisioned_page.has_other_pages %}
+    <nav style="display:flex; justify-content:center; padding:.75rem 0 .25rem;">
+      <ul class="pagination pagination-sm mb-0">
+        {% if decisioned_page.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'dec_page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}dec_page={{ decisioned_page.previous_page_number }}#section-decisioned">&laquo;</a>
+          </li>
+        {% endif %}
+        {% for p in decisioned_page.paginator.page_range %}
+          <li class="page-item {% if p == decisioned_page.number %}active{% endif %}">
+            <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'dec_page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}dec_page={{ p }}#section-decisioned">{{ p }}</a>
+          </li>
+        {% endfor %}
+        {% if decisioned_page.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for k,v in request.GET.items %}{% if k != 'dec_page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}dec_page={{ decisioned_page.next_page_number }}#section-decisioned">&raquo;</a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
     {% else %}
-      <p class="pcl-help" style="margin-bottom:0;">No decisioned changes found.</p>
+      <div style="text-align:center; padding: 2rem 1rem; color: #8a8a9a;">No decisioned changes found.</div>
     {% endif %}
 
   </div>
@@ -484,6 +499,18 @@
       if (e.key === 'Enter') window.location.href = row.dataset.href;
     });
   });
+
+  // Suppress bounce when returning to #section-decisioned:
+  // scroll instantly before the browser's delayed anchor jump fires
+  (function () {
+    if (window.location.hash === '#section-decisioned') {
+      var el = document.getElementById('section-decisioned');
+      if (el) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+    }
+  })();
 </script>
 
 {% endblock %}

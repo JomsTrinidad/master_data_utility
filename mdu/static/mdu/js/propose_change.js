@@ -653,11 +653,14 @@
       if (scroller && row) {
         const rowTop = row.offsetTop;
         scroller.scrollTop = Math.max(0, rowTop - Math.floor(scroller.clientHeight * 0.25));
-        
+        document.documentElement.style.visibility = 'visible';
+
         const firstCell = row.querySelector('input.business-cell:not([readonly])');
         if (firstCell) {
           firstCell.focus({ preventScroll: true });
         }
+      } else {
+        document.documentElement.style.visibility = 'visible';
       }
     }, 0);
   }
