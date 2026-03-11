@@ -18,6 +18,15 @@ def get_item(d, key):
         return d.get(key, "")
     return ""
 
+
+@register.filter
+def attr(obj, field_name):
+    """Return getattr(obj, field_name, '') — used in metadata section template loop."""
+    try:
+        return getattr(obj, str(field_name), "") or ""
+    except Exception:
+        return ""
+
 @register.filter
 def json_loads(s):
     try:
@@ -39,8 +48,10 @@ def status_badge_color(status: str) -> str:
     # Header lifecycle statuses
     if s == "ACTIVE":
         return "success"
-    if s == "IN_REVIEW":
+    if s in {"PENDING_REVIEW", "IN_REVIEW"}:
         return "warning"
+    if s == "REJECTED":
+        return "danger"
     if s == "RETIRED":
         return "secondary"
 

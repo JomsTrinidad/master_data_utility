@@ -1,458 +1,248 @@
 (function () {
-  // Prevent browser from trying to restore scroll position after POST-back navigation
-  if ("scrollRestoration" in history) {
-    history.scrollRestoration = "manual";
-  }
+  "use strict";
 
-  // Hide body until scroll is restored to prevent flash
-  const savedScrollPos = sessionStorage.getItem('proposedDataScrollPos');
-  if (savedScrollPos) {
-    document.documentElement.style.visibility = 'hidden';
-  }
+  // ── Scroll restoration ───────────────────────────────────
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
+  const savedScrollPos = sessionStorage.getItem("pcfScrollPos");
+  if (savedScrollPos) document.documentElement.style.visibility = "hidden";
 
-  function $(id) { return document.getElementById(id); }
+  // ── Helpers ──────────────────────────────────────────────
+  function $id(id) { return document.getElementById(id); }
 
-
-  function parseJsonHidden(id) {
-    const el = $(id);
+  function parseHiddenJson(id) {
+    const el = $id(id);
     if (!el) return null;
     try { return JSON.parse(el.value || "{}"); } catch (e) { return null; }
   }
 
-  // Elements
-  const form = $("proposeForm");
+  // ── Core elements ────────────────────────────────────────
+  const form          = $id("pcfForm");
+  const saveDraftBtn  = $id("pcfSaveDraftBtn");
+  const submitBtn     = $id("pcfSubmitBtn");
+  const submitWrap    = $id("pcfSubmitWrap");
+  const submitHelp    = $id("pcfSubmitHelp");
+  const saveNext      = $id("pcfSaveNext");
+  const overviewOpen  = $id("pcfOverviewOpen");
+  const backBtn       = $id("pcfBackBtn");
+  const cancelBtn     = $id("pcfCancelBtn");
 
-  // ----------------------------------------------------
-  // Keep Request Overview expanded on Add New Row submit
-  // ----------------------------------------------------
-  form.addEventListener("submit", function (e) {
-    const submitter = e.submitter;
-    if (!submitter) return;
+  const ticketRef     = $id("pcfTicketRef");
+  const changeReason  = $id("pcfChangeReason");
+  const categoryWrap  = $id("pcfCategoryWrap");
+  const categorySelect = categoryWrap ? categoryWrap.querySelector("select") : null;
 
-    // If adding a new row but there are removed rows, force a save first
-    if (submitter.value === "add_row") {
-      const removedRows = document.querySelectorAll('tr.d-none.mdu-row-locked');
-      if (removedRows.length > 0) {
-        e.preventDefault();
-        alert("Please save your changes first (removed rows need to be saved) before adding new rows.");
-        
-        // Trigger save draft modal
-        if (saveBtn && !saveBtn.disabled) {
-          saveBtn.click();
-        }
-        return;
-      }
-      
-      // Save current scroll position before submit
-      sessionStorage.setItem('proposedDataScrollPos', window.pageYOffset || document.documentElement.scrollTop);
+  const bulkCsvInput  = $id("pcfBulkCsvInput");
+  const bulkUploadBtn = $id("pcfBulkUploadBtn");
+  const bulkModalEl   = $id("pcfBulkModal");
+  const saveModalEl   = $id("pcfSaveDraftModal");
+  const saveStayBtn   = $id("pcfSaveStayBtn");
+  const saveBackBtn   = $id("pcfSaveBackBtn");
 
+  const metaEl        = $id("pcfDraftUxMeta");
+  const rowsAddedCount   = metaEl ? parseInt(metaEl.getAttribute("data-rows-added-count") || "0", 10) : 0;
+  const focusRowIndexRaw = metaEl ? (metaEl.getAttribute("data-focus-row-index") || "") : "";
+  const focusRowIndex    = focusRowIndexRaw === "" ? null : parseInt(focusRowIndexRaw, 10);
 
-
-
-      
-    }
-
-    // Only intervene for Add New Row
-    if (submitter.value !== "add_row") return;
-
-    // FORCE accordion open state into POST payload
-    const openInput = document.getElementById("requestOverviewOpen");
-    if (openInput) {
-      openInput.value = "1";
-    }
-  });
-
-  const saveBtn = $("saveDraftBtn");
-
-  const accordionToggle = $("requestOverviewToggle");
-  const collapseEl = $("collapseRequestOverview");
-  const openInput = $("requestOverviewOpen");
-
-  const backBtn = $("backToReferenceBtn");
-  const cancelBtn = $("cancelBtn");
-
-  const bulkCsvInput = $("bulkCsvInput");
-  const bulkUploadBtn = $("bulkUploadBtn");
-  const bulkModalEl = $("bulkUploadModal");
-
-  const meta = $("draftUxMeta");
-  const rowsAddedCount = meta ? parseInt(meta.getAttribute("data-rows-added-count") || "0", 10) : 0;
-  const focusRowIndexRaw = meta ? (meta.getAttribute("data-focus-row-index") || "") : "";
-  const focusRowIndex = focusRowIndexRaw === "" ? null : parseInt(focusRowIndexRaw, 10);
-
-  // Save Draft modal elements
-  const saveNext = $("saveNext");                 // hidden input name="save_next"
-  const saveModalEl = $("saveDraftModal");        // modal id
-  const saveStayBtn = $("saveDraftStayBtn");      // Keep Editing
-  const saveBackBtn = $("saveDraftBackBtn");      // Return To Reference
-
-
-  function deleteIcon() {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-          fill="none" viewBox="0 0 24 24">
-        <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"
-              stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    `;
-  }
-
-  function undoIcon() {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-          fill="none" viewBox="0 0 24 24">
-        <path d="M9 14l-4-4 4-4M5 10h8a6 6 0 110 12"
-              stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    `;
-  }
-
-
-  // ---------- Request Overview (Always Open; No Collapse) ----------
-  // Keep POST-backed open flag stable, and do not attach any collapse handlers.
-  if (openInput) openInput.value = "1";
-
-
-  // ---------- Bulk upload button enable/disable ----------
-  function syncBulkUploadBtn() {
-    if (!bulkUploadBtn) return;
-    const ok = !!(bulkCsvInput && bulkCsvInput.files && bulkCsvInput.files.length > 0);
-    bulkUploadBtn.disabled = !ok;
-  }
-
-  if (bulkCsvInput) bulkCsvInput.addEventListener("change", syncBulkUploadBtn);
-
-  if (bulkModalEl) {
-    bulkModalEl.addEventListener("shown.bs.modal", syncBulkUploadBtn);
-    bulkModalEl.addEventListener("hidden.bs.modal", function () {
-      if (bulkCsvInput) bulkCsvInput.value = "";
-      syncBulkUploadBtn();
-    });
-  }
-
-  syncBulkUploadBtn();
-
-  // ---------- Baseline-driven dirty ----------
-  const baselineObj = parseJsonHidden("baselinePayload") || {};
+  // ── Baseline data ────────────────────────────────────────
+  const baselineObj  = parseHiddenJson("pcfBaselinePayload") || {};
   const baselineRows = Array.isArray(baselineObj.rows) ? baselineObj.rows : [];
 
   let baselineUpdateIds = {};
   try {
-    const raw = (document.getElementById("baselineUpdateIds") || {}).value || "{}";
+    const raw = ($id("pcfBaselineUpdateIds") || {}).value || "{}";
     baselineUpdateIds = JSON.parse(raw);
-  } catch (e) {
-    baselineUpdateIds = {};
+  } catch (e) { baselineUpdateIds = {}; }
+
+  // ── Operation badge helpers ──────────────────────────────
+  const OP_CLASS = {
+    "KEEP ROW":      "pcf-op-keep",
+    "INSERT ROW":    "pcf-op-insert",
+    "UPDATE ROW":    "pcf-op-update",
+    "RETIRE ROW":    "pcf-op-retire",
+    "UNRETIRE ROW":  "pcf-op-insert",
+  };
+  const OP_LABEL = {
+    "KEEP ROW":      "Keep",
+    "INSERT ROW":    "Insert",
+    "UPDATE ROW":    "Update",
+    "RETIRE ROW":    "Retire",
+    "UNRETIRE ROW":  "Unretire",
+  };
+
+  function setOpBadge(rowIndex, code) {
+    const badge = $id(`pcfOpBadge-${rowIndex}`);
+    const hidden = $id(`pcfOpCode-${rowIndex}`);
+    if (!badge) return;
+
+    const cls = OP_CLASS[code] || "pcf-op-keep";
+    badge.className = `pcf-op ${cls}`;
+    badge.textContent = OP_LABEL[code] || code || "";
+    if (hidden) hidden.value = code || "";
   }
 
-  // ----------------------------------------------------
-  // Submit gating (mirrors server-side rules)
-  // ----------------------------------------------------
-  const submitBtn = $("submitBtn");
-  const submitBtnWrap = $("submitBtnWrap");
-  const submitHelp = $("submitHelp");
-
-  const changeTicketRef = $("changeTicketRef");
-  const changeReason = $("changeReason");
-  const changeCategory = document.querySelector('select[name="change_category"]');
-
-  const CHANGE_OPS = new Set(["INSERT ROW", "UPDATE ROW", "RETIRE ROW", "UNRETIRE ROW"]);
-
-  function _norm(v) {
-    return (v == null ? "" : String(v)).trim();
+  function setUpdateRowId(rowIndex, val) {
+    const el = $id(`pcfUpdateRowId-${rowIndex}`);
+    if (el) el.value = val || "";
   }
 
-  function hasAnyChangeOp() {
-    const opInputs = document.querySelectorAll('input[id^="opCode-"]');
-    for (const el of opInputs) {
-      const v = _norm(el.value).toUpperCase();
-      if (CHANGE_OPS.has(v)) return true;
-    }
-    return false;
-  }
-
-  function computeMissingRequired() {
-    const missing = [];
-    if (changeTicketRef && !_norm(changeTicketRef.value)) missing.push("change_ticket_ref");
-    if (changeReason && !_norm(changeReason.value)) missing.push("change_reason");
-
-    const cat = changeCategory ? _norm(changeCategory.value).toUpperCase() : "";
-    if (!cat || cat === "NONE") missing.push("change_category");
-
-    if (!hasAnyChangeOp()) missing.push("payload_json");
-    return missing;
-  }
-
-  function setInvalid(el, on) {
-    if (!el) return;
-    el.classList.toggle("is-invalid", !!on);
-  }
-
-  function showSubmitMissing(missing) {
-    // Show helper text and highlight the fields.
-    if (submitHelp) submitHelp.classList.remove("d-none");
-
-    setInvalid(changeTicketRef, missing.includes("change_ticket_ref"));
-    setInvalid(changeReason, missing.includes("change_reason"));
-    setInvalid(changeCategory, missing.includes("change_category"));
-
-    if (missing.includes("payload_json")) {
-      // Guide the user to the table if they haven't made any row changes yet.
-      const tableAnchor = document.querySelector("#proposedDataTableWrap") || document.querySelector("#proposedDataWrap") || document.querySelector("table");
-      if (tableAnchor) tableAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      const overview = document.querySelector("#requestOverviewAccordion") || document.querySelector("#headingRequestOverview");
-      if (overview) overview.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
-  function updateSubmitState() {
-    if (!submitBtn) return;
-    const missing = computeMissingRequired();
-    const ready = missing.length === 0;
-    submitBtn.disabled = !ready;
-
-    // Do not spam the helper text while typing; only show when already visible (server-side attempt)
-    // or when the user clicks the disabled submit area.
-    if (submitHelp && !ready && submitHelp.classList.contains("d-none")) {
-      setInvalid(changeTicketRef, false);
-      setInvalid(changeReason, false);
-      setInvalid(changeCategory, false);
-    }
-  }
-
-  // Allow the user to click the disabled submit button wrapper to see what is missing.
-  if (submitBtnWrap) {
-    submitBtnWrap.addEventListener("click", function () {
-      if (!submitBtn || !submitBtn.disabled) return;
-      showSubmitMissing(computeMissingRequired());
-    });
-  }
-
-  // Do not let Change Category sit on a placeholder.
-  if (changeCategory) {
-    const cur = _norm(changeCategory.value).toUpperCase();
-    if (!cur || cur === "NONE") {
-      const opts = Array.from(changeCategory.options || []);
-      const firstReal = opts.find(o => _norm(o.value) && _norm(o.value).toUpperCase() !== "NONE");
-      if (firstReal) changeCategory.value = firstReal.value;
-    }
-  }
-
+  // ── Baseline utilities ───────────────────────────────────
   function baselineValue(rowIndex, col) {
     const r = baselineRows[rowIndex];
-    if (!r) return null; // new row not in baseline
+    if (!r) return null;
     const v = r[col];
     return (v === undefined || v === null) ? "" : String(v);
   }
 
-  function isRowDeleted(rowIndex) {
-    const del = document.getElementById(`rowDelete-${rowIndex}`);
-    return !!(del && del.value === "1");
+  function rowIsNew(rowIndex) { return baselineRows[rowIndex] == null; }
+
+  function isRowRetired(rowIndex) {
+    const el = $id(`pcfRowDelete-${rowIndex}`);
+    return !!(el && el.value === "1");
   }
 
+  // ── Dirty computation ────────────────────────────────────
   function recomputeAllDirty() {
-    const inputs = document.querySelectorAll("input.business-cell");
-    for (const input of inputs) {
+    // Business cells
+    document.querySelectorAll("input.pcf-business-cell").forEach(function (input) {
       const name = input.getAttribute("name") || "";
       const m = name.match(/^cell__(\d+)__(string_\d{2})$/);
-      if (!m) continue;
+      if (!m) return;
 
       const rowIndex = parseInt(m[1], 10);
       const col = m[2];
 
-      // RETIRE ROW overrides dirty visuals
-      if (isRowDeleted(rowIndex)) {
-        input.classList.remove("mdu-dirty");
-        continue;
+      if (isRowRetired(rowIndex)) {
+        input.classList.remove("pcf-dirty");
+        syncDisplayDirty(input, false);
+        return;
       }
 
       const base = baselineValue(rowIndex, col);
-      const now = (input.value ?? "");
+      const now  = input.value ?? "";
+      const dirty = (base === null) ? (now.trim() !== "") : (now !== base);
 
-      let isDirty = false;
-      if (base === null) isDirty = now.trim() !== "";
-      else isDirty = now !== base;
+      input.classList.toggle("pcf-dirty", dirty);
+      syncDisplayDirty(input, dirty);
+    });
 
-      if (isDirty) input.classList.add("mdu-dirty");
-      else input.classList.remove("mdu-dirty");
-    }
-
-    // Change comments are part of the draft and should also participate in dirty highlighting.
-    const comments = document.querySelectorAll("textarea.change-comment-cell, input.change-comment-cell");
-    for (const el of comments) {
+    // Comment cells
+    document.querySelectorAll("textarea.pcf-comment-cell").forEach(function (el) {
       const rowIndex = parseInt(el.getAttribute("data-row-index") || "", 10);
-      if (Number.isNaN(rowIndex)) continue;
-      const orig = (el.getAttribute("data-orig") ?? "");
-      const now = (el.value ?? "");
-      const isDirty = (now.trim() !== String(orig).trim());
-      if (isDirty) el.classList.add("mdu-dirty");
-      else el.classList.remove("mdu-dirty");
-    }
+      if (isNaN(rowIndex)) return;
+      const orig  = el.getAttribute("data-orig") || "";
+      const dirty = (el.value ?? "").trim() !== String(orig).trim();
+      el.classList.toggle("pcf-dirty", dirty);
+      syncDisplayDirty(el, dirty);
+    });
 
-    // Row-level highlight: add mdu-row-dirty to any tr that has at least one dirty cell.
-    // Deleted rows keep their own styling and are excluded.
-    const allRows = document.querySelectorAll('tr[id^="row-"]');
-    for (const tr of allRows) {
-      const id = tr.getAttribute("id") || "";
-      const m2 = id.match(/^row-(\d+)$/);
-      if (!m2) continue;
-      const rowIndex = parseInt(m2[1], 10);
-      if (isRowDeleted(rowIndex)) {
-        tr.classList.remove("mdu-row-dirty");
-        continue;
-      }
-      const hasDirtyCell = !!tr.querySelector(".mdu-dirty");
-      tr.classList.toggle("mdu-row-dirty", hasDirtyCell);
-    }
+    // Row-level dirty highlight
+    document.querySelectorAll("tr[id^='pcfRow-']").forEach(function (tr) {
+      const m = (tr.id || "").match(/^pcfRow-(\d+)$/);
+      if (!m) return;
+      const rowIndex = parseInt(m[1], 10);
+      if (isRowRetired(rowIndex)) { tr.classList.remove("pcf-row-dirty"); return; }
+      const hasDirty = !!tr.querySelector(".pcf-dirty");
+      tr.classList.toggle("pcf-row-dirty", hasDirty);
+    });
 
     updateSubmitState();
   }
 
-  // ---------- Row intent derivation + delete/undo ----------
-  const preDeleteSnapshots = new Map(); // rowIndex -> { col -> value }
-
-  // label: what the user sees in the Operation column
-  // code: what gets POSTed back to Django (must match locked UI labels)
-  // Allowed codes: KEEP ROW | UPDATE ROW | INSERT ROW | RETIRE ROW | UNRETIRE ROW
-  // Internal code (never meant to be persisted): SKIP (used when undoing an INSERT row)
-  function setOp(rowIndex, label, code) {
-    const opLabel = document.getElementById(`opLabel-${rowIndex}`);
-    const opCode = document.getElementById(`opCode-${rowIndex}`);
-    if (opLabel) opLabel.value = label || "";
-    if (opCode) opCode.value = code || "";
-
-    // Visual cue: only RETIRE ROW shows red operation text
-    if (opLabel) {
-      const isRetire = (String(code || "").toUpperCase() === "RETIRE ROW");
-      opLabel.classList.toggle("text-danger", isRetire);
-    }
-
-    updateSubmitState();
+  function syncDisplayDirty(input, dirty) {
+    const cte = input.closest(".pcf-cte");
+    if (!cte) return;
+    const display = cte.querySelector(".pcf-cte-display");
+    if (display) display.classList.toggle("pcf-dirty", dirty);
   }
 
-  function setUpdateRowId(rowIndex, val) {
-    const el = document.getElementById(`updateRowId-${rowIndex}`);
-    if (el) el.value = val || "";
-  }
-
-  function rowHasAnyValue(rowIndex) {
-    const row = document.getElementById(`row-${rowIndex}`);
-    if (!row) return false;
-    const inputs = row.querySelectorAll("input.business-cell");
-    for (const i of inputs) {
-      if ((i.value || "").trim() !== "") return true;
-    }
-    return false;
-  }
-
-  function rowIsNew(rowIndex) {
-    return baselineRows[rowIndex] == null;
-  }
-
+  // ── Row intent (op badge + update_rowid) ─────────────────
   function deriveRowIntent(rowIndex) {
-    // header rows don't have row-<idx> id; guard anyway
-    const row = document.getElementById(`row-${rowIndex}`);
+    const row = $id(`pcfRow-${rowIndex}`);
     if (!row) return;
 
-    if (isRowDeleted(rowIndex)) {
-      const hash = baselineUpdateIds[rowIndex] || "";
-      setOp(rowIndex, "RETIRE ROW", "RETIRE ROW");
-      setUpdateRowId(rowIndex, hash);
+    if (isRowRetired(rowIndex)) {
+      setOpBadge(rowIndex, "RETIRE ROW");
+      setUpdateRowId(rowIndex, baselineUpdateIds[rowIndex] || "");
       return;
     }
-
     if (rowIsNew(rowIndex)) {
-      // UX rule: a newly added row defaults to INSERT ROW even if still blank
-      setOp(rowIndex, "INSERT ROW", "INSERT ROW");
+      setOpBadge(rowIndex, "INSERT ROW");
       setUpdateRowId(rowIndex, "");
       return;
     }
-
-
-    const anyDirty = !!document.querySelector(`#row-${rowIndex} input.business-cell.mdu-dirty`);
+    const anyDirty = !!row.querySelector("input.pcf-business-cell.pcf-dirty");
     if (anyDirty) {
-      const hash = baselineUpdateIds[rowIndex] || "";
-      setOp(rowIndex, "UPDATE ROW", "UPDATE ROW");
-      setUpdateRowId(rowIndex, hash);
+      setOpBadge(rowIndex, "UPDATE ROW");
+      setUpdateRowId(rowIndex, baselineUpdateIds[rowIndex] || "");
     } else {
-      setOp(rowIndex, "KEEP ROW", "KEEP ROW");
+      setOpBadge(rowIndex, "KEEP ROW");
       setUpdateRowId(rowIndex, "");
     }
   }
 
-  function applyDeleteUI(rowIndex, on) {
-    const row = document.getElementById(`row-${rowIndex}`);
-    if (!row) return;
+  // ── Retire / undo ─────────────────────────────────────────
+  const preDeleteSnapshots = new Map();
 
-    const btn = row.querySelector(`.mdu-row-toggle-delete[data-row-index="${rowIndex}"]`);
-    const inputs = row.querySelectorAll("input.business-cell");
-    const comment = document.getElementById(`changeComment-${rowIndex}`);
+  function applyRetireUI(rowIndex, retiring) {
+    const row    = $id(`pcfRow-${rowIndex}`);
+    const btn    = $id(`pcfRetireBtn-${rowIndex}`);
+    const inputs = row ? row.querySelectorAll("input.pcf-business-cell") : [];
 
-    if (on) {
-      // snapshot current edits for undo
+    if (retiring) {
+      // Snapshot
       const snap = {};
-      for (const i of inputs) {
-        const col = i.getAttribute("data-col") || "";
-        snap[col] = i.value ?? "";
-      }
+      inputs.forEach(function (i) { snap[i.getAttribute("data-col") || ""] = i.value ?? ""; });
       preDeleteSnapshots.set(rowIndex, snap);
 
-      // restore baseline values (clears dirty)
-      for (const i of inputs) {
-        const col = i.getAttribute("data-col") || "";
+      // Restore baseline values, lock inputs
+      inputs.forEach(function (i) {
+        const col  = i.getAttribute("data-col") || "";
         const base = baselineValue(rowIndex, col);
-        i.value = (base === null) ? "" : base;
+        i.value    = (base === null) ? "" : base;
         i.readOnly = true;
-        i.classList.remove("mdu-dirty");
-      }
+        i.classList.remove("pcf-dirty");
 
-
-      row.classList.add("mdu-row-deleted");
-      row.classList.add("mdu-row-locked");
-
-      // Change comment remains editable for RETIRE ROW
-      if (comment) comment.readOnly = false;
-      if (btn) {
-        btn.innerHTML  = undoIcon(); //"↩";
-        btn.setAttribute("aria-label", "Undo Retire");
-      }
-    } else {
-      // restore snapshot
-      const snap = preDeleteSnapshots.get(rowIndex) || {};
-      for (const i of inputs) {
-        const col = i.getAttribute("data-col") || "";
-        if (Object.prototype.hasOwnProperty.call(snap, col)) {
-          i.value = snap[col];
+        // Close any open CTE editor and update display
+        const cte = i.closest(".pcf-cte");
+        if (cte) {
+          cteClose(cte, true);
+          const display = cte.querySelector(".pcf-cte-display");
+          if (display) { display.textContent = i.value; display.classList.remove("pcf-dirty"); }
         }
-        i.readOnly = false;
-      }
+      });
 
-      const cc = document.getElementById(`changeComment-${rowIndex}`);
-      if (cc) cc.readOnly = false;
-
-      // Remove Operation red unless it becomes RETIRE again via deriveRowIntent
-      const opLabel = document.getElementById(`opLabel-${rowIndex}`);
-      if (opLabel) opLabel.classList.remove("text-danger");
-
-      row.classList.remove("mdu-row-deleted");
-      row.classList.remove("mdu-row-locked");
-
-      if (comment) comment.readOnly = false;
-
-      if (comment) {
-        comment.readOnly = false;
-        comment.classList.remove("text-danger");
-      }
-
-      const del = document.getElementById(`rowDelete-${rowIndex}`);
-      if (del) del.value = "0";
-
+      if (row) { row.classList.add("pcf-row-retired"); row.classList.remove("pcf-row-dirty"); }
       if (btn) {
-        btn.innerHTML  = deleteIcon();//"🗑";
-    btn.setAttribute("aria-label", "Retire Row");
+        btn.innerHTML = '↶';
+        btn.classList.add("is-undo");
+        btn.setAttribute("aria-label", "Restore Row");
       }
 
+    } else {
+      // Restore snapshot
+      const snap = preDeleteSnapshots.get(rowIndex) || {};
+      inputs.forEach(function (i) {
+        const col = i.getAttribute("data-col") || "";
+        if (Object.prototype.hasOwnProperty.call(snap, col)) i.value = snap[col];
+        i.readOnly = false;
+        // Update display pill
+        const cte = i.closest(".pcf-cte");
+        if (cte) {
+          const display = cte.querySelector(".pcf-cte-display");
+          if (display) display.textContent = i.value;
+        }
+      });
+
+      const delInput = $id(`pcfRowDelete-${rowIndex}`);
+      if (delInput) delInput.value = "0";
+
+      if (row) row.classList.remove("pcf-row-retired");
+      if (btn) {
+        btn.innerHTML = '−';
+        btn.classList.remove("is-undo");
+        btn.setAttribute("aria-label", "Retire Row");
+      }
 
       recomputeAllDirty();
     }
@@ -460,281 +250,385 @@
     deriveRowIntent(rowIndex);
   }
 
-  // ---------- Save Draft enable/disable ----------
-  function makerFieldsDirty() {
-    const reason = $("changeReason");
-    const ticket = $("changeTicketRef");
-    const wrap = $("changeCategoryWrap");
-    const select = wrap ? wrap.querySelector("select") : null;
-
-    const changed = (el) => {
+  // ── Save draft state ─────────────────────────────────────
+  function metaFieldsDirty() {
+    function changed(el) {
       if (!el) return false;
-      const orig = el.getAttribute("data-orig") ?? "";
-      return (el.value ?? "") !== orig;
-    };
-
-    const catOrig = wrap ? (wrap.getAttribute("data-orig") ?? "") : "";
-    const catChanged = select ? ((select.value ?? "") !== catOrig) : false;
-
-    // Any change comment edits should also enable Save Draft
-    let commentChanged = false;
-    const comments = document.querySelectorAll("textarea.change-comment-cell, input.change-comment-cell");
-    for (const el of comments) {
-      const orig = (el.getAttribute("data-orig") ?? "");
-      if ((el.value ?? "") !== orig) { commentChanged = true; break; }
+      return (el.value ?? "") !== (el.getAttribute("data-orig") ?? "");
     }
+    const catOrig    = categoryWrap ? (categoryWrap.getAttribute("data-orig") ?? "") : "";
+    const catChanged = categorySelect ? (categorySelect.value ?? "") !== catOrig : false;
 
-    return changed(reason) || changed(ticket) || catChanged || commentChanged;
+    let commentDirty = false;
+    document.querySelectorAll("textarea.pcf-comment-cell").forEach(function (el) {
+      if ((el.value ?? "") !== (el.getAttribute("data-orig") ?? "")) commentDirty = true;
+    });
+
+    // Reference metadata fields (§0 section — steward/approver only)
+    let metaSectionDirty = false;
+    document.querySelectorAll(".pcf-hm-field").forEach(function (el) {
+      if ((el.value ?? "") !== (el.getAttribute("data-orig") ?? "")) metaSectionDirty = true;
+    });
+
+    return changed(ticketRef) || changed(changeReason) || catChanged || commentDirty || metaSectionDirty;
   }
 
   function updateSaveDraftState() {
-    const anyCellDirty = !!document.querySelector("input.business-cell.mdu-dirty");
-    const changed = anyCellDirty || makerFieldsDirty();
-    if (saveBtn) saveBtn.disabled = !changed;
+    const anyCellDirty = !!document.querySelector("input.pcf-business-cell.pcf-dirty");
+    const dirty = anyCellDirty || metaFieldsDirty();
+    if (saveDraftBtn) saveDraftBtn.disabled = !dirty;
   }
 
-  // ---------- Unified input handler ----------
+  // ── Submit gating ────────────────────────────────────────
+  const CHANGE_OPS = new Set(["INSERT ROW", "UPDATE ROW", "RETIRE ROW", "UNRETIRE ROW"]);
+
+  function hasAnyChangeOp() {
+    let found = false;
+    document.querySelectorAll("input[id^='pcfOpCode-']").forEach(function (el) {
+      if (CHANGE_OPS.has((el.value || "").toUpperCase().trim())) found = true;
+    });
+    return found;
+  }
+
+  function computeMissing() {
+    const missing = [];
+    if (ticketRef    && !(ticketRef.value || "").trim())    missing.push("ticket");
+    if (changeReason && !(changeReason.value || "").trim()) missing.push("reason");
+    const cat = categorySelect ? (categorySelect.value || "").toUpperCase().trim() : "";
+    if (!cat || cat === "NONE") missing.push("category");
+    if (!hasAnyChangeOp()) missing.push("payload");
+    return missing;
+  }
+
+  function updateSubmitState() {
+    if (!submitBtn) return;
+    const ready = computeMissing().length === 0;
+    submitBtn.disabled = !ready;
+  }
+
+  // Click on disabled submit wrapper → show what's missing
+  if (submitWrap) {
+    submitWrap.addEventListener("click", function () {
+      if (!submitBtn || !submitBtn.disabled) return;
+      const missing = computeMissing();
+      if (submitHelp) submitHelp.classList.remove("d-none");
+      if (ticketRef)    ticketRef.classList.toggle("is-invalid",    missing.includes("ticket"));
+      if (changeReason) changeReason.classList.toggle("is-invalid", missing.includes("reason"));
+      if (categorySelect) categorySelect.classList.toggle("is-invalid", missing.includes("category"));
+    });
+  }
+
+  // Auto-select first real category option
+  if (categorySelect) {
+    const cur = (categorySelect.value || "").toUpperCase().trim();
+    if (!cur || cur === "NONE") {
+      const first = Array.from(categorySelect.options || [])
+        .find(function (o) { const v = (o.value || "").toUpperCase().trim(); return v && v !== "NONE"; });
+      if (first) categorySelect.value = first.value;
+    }
+  }
+
+  // ── Unified input listener ───────────────────────────────
   document.addEventListener("input", function (e) {
     const el = e.target;
     if (!el) return;
 
-    if (el.classList && el.classList.contains("business-cell")) {
+    if (el.classList.contains("pcf-business-cell")) {
       const rowIndex = parseInt(el.getAttribute("data-row-index") || "", 10);
-
-      // If deleted, ignore edits (should be readonly anyway)
-      if (!Number.isNaN(rowIndex) && isRowDeleted(rowIndex)) return;
-
+      if (!isNaN(rowIndex) && isRowRetired(rowIndex)) return;
       recomputeAllDirty();
-      if (!Number.isNaN(rowIndex)) deriveRowIntent(rowIndex);
+      if (!isNaN(rowIndex)) deriveRowIntent(rowIndex);
       updateSaveDraftState();
-      updateSubmitState();
       return;
     }
-
-    if (el.classList && el.classList.contains("change-comment-cell")) {
+    if (el.classList.contains("pcf-comment-cell")) {
       recomputeAllDirty();
       updateSaveDraftState();
-      updateSubmitState();
       return;
     }
-
-    if (el.id === "changeReason" || el.id === "changeTicketRef") {
+    if (el === ticketRef || el === changeReason) {
       updateSaveDraftState();
       updateSubmitState();
       return;
     }
-
-    if (el.tagName === "SELECT" && el.closest("#changeCategoryWrap")) {
+    if (el.tagName === "SELECT" && el.closest("#pcfCategoryWrap")) {
       updateSaveDraftState();
       updateSubmitState();
-      return;
+    }
+    // Reference metadata fields
+    if (el.classList.contains("pcf-hm-field")) {
+      updateSaveDraftState();
     }
   });
 
-  // ---------- Trash / Undo click handler (event delegation) ----------
+  // ── Retire toggle delegation ──────────────────────────────
   document.addEventListener("click", function (e) {
-    const btn = e.target && e.target.closest && e.target.closest(".mdu-row-toggle-delete");
+    const btn = e.target && e.target.closest && e.target.closest(".pcf-retire-btn");
     if (!btn) return;
 
     const rowIndex = parseInt(btn.getAttribute("data-row-index") || "", 10);
-    if (Number.isNaN(rowIndex)) return;
+    if (isNaN(rowIndex)) return;
 
-    const row = document.getElementById(`row-${rowIndex}`);
+    const row = $id(`pcfRow-${rowIndex}`);
 
-  // If it's a newly added (INSERT ROW) row, clicking the trash icon just hides it
-  if (rowIsNew(rowIndex) && row) {
-    // Clear values so the server doesn't treat it as an insert
-    const inputs = row.querySelectorAll("input.business-cell");
-    for (const i of inputs) {
-      i.value = "";
-      i.classList.remove("mdu-dirty");
-      i.readOnly = true;
+    // Newly inserted row → just hide it (SKIP)
+    if (rowIsNew(rowIndex) && row) {
+      row.querySelectorAll("input.pcf-business-cell").forEach(function (i) {
+        i.value = ""; i.classList.remove("pcf-dirty"); i.readOnly = true;
+      });
+      const opCode = $id(`pcfOpCode-${rowIndex}`);
+      if (opCode) opCode.value = "SKIP";
+      setOpBadge(rowIndex, "");
+      row.classList.add("pcf-row-retired");
+      row.style.display = "none";
+      updateSaveDraftState();
+      return;
     }
 
-    // Mark with an internal operation code so server can skip this row
-    // (SKIP is never shown to users and should not be included in audits)
-    setOp(rowIndex, "", "SKIP");
-    setUpdateRowId(rowIndex, "");
-
-    // Mark as locked + removed
-    row.classList.add("mdu-row-locked");
-    row.classList.add("d-none");
-
-    updateSaveDraftState();
-    return;
-  }
-
-    // Baseline rows: toggle RETIRE ROW / UNDO
-    const del = document.getElementById(`rowDelete-${rowIndex}`);
-    if (!del) return;
-
-    const next = (del.value === "1") ? "0" : "1";
-    del.value = next;
-
-    applyDeleteUI(rowIndex, next === "1");
+    // Existing row → toggle retire
+    const delInput = $id(`pcfRowDelete-${rowIndex}`);
+    if (!delInput) return;
+    const next = delInput.value === "1" ? "0" : "1";
+    delInput.value = next;
+    applyRetireUI(rowIndex, next === "1");
     updateSaveDraftState();
   });
 
-  // ---------- Initial compute ----------
-  recomputeAllDirty();
-  updateSaveDraftState();
+  // ══════════════════════════════════════════════════════════
+  // CLICK-TO-EDIT
+  // ══════════════════════════════════════════════════════════
 
-  // Derive operation labels on load
-  (function initRowIntents() {
-    const trs = document.querySelectorAll('tr[id^="row-"]');
-    for (const tr of trs) {
-      const id = tr.getAttribute("id") || "";
-      const m = id.match(/^row-(\d+)$/);
-      if (!m) continue;
+  let _activeCell = null;
 
-      const rowIndex = parseInt(m[1], 10);
+  function cteOpen(cell) {
+    if (_activeCell && _activeCell !== cell) cteClose(_activeCell, false);
 
-      // If payload already has RETIRE ROW, ensure toggle reflects it and styling applied
-      const opCode = document.getElementById(`opCode-${rowIndex}`);
-      const opNow = opCode ? (opCode.value || "").toUpperCase() : "";
-      const alreadyRetired = opNow === "RETIRE ROW" || opNow === "DELETE"; // legacy
-      const del = document.getElementById(`rowDelete-${rowIndex}`);
-      if (del && alreadyRetired) del.value = "1";
+    const tr = cell.closest("tr");
+    if (tr && tr.classList.contains("pcf-row-retired")) return;
 
-      if (del && del.value === "1") applyDeleteUI(rowIndex, true);
-      else deriveRowIntent(rowIndex);
-    }
-  })();
+    const display = cell.querySelector(".pcf-cte-display");
+    const editor  = cell.querySelector(".pcf-cte-editor");
+    const input   = editor ? editor.querySelector("input, textarea") : null;
+    if (!display || !editor || !input || input.readOnly) return;
 
-  // ---------- Initialize all delete button icons ----------
-  (function initDeleteIcons() {
-    const deleteButtons = document.querySelectorAll('.mdu-row-toggle-delete');
-    for (const btn of deleteButtons) {
-      const rowIndex = parseInt(btn.getAttribute("data-row-index") || "", 10);
-      if (Number.isNaN(rowIndex)) continue;
-      
-      // Check if row is already marked for deletion
-      const del = document.getElementById(`rowDelete-${rowIndex}`);
-      if (del && del.value === "1") {
-        btn.innerHTML = undoIcon();
-      } else {
-        btn.innerHTML = deleteIcon();
-      }
-    }
-  })();
-
-  // ---------- Restore scroll and focus after Add Row ----------
-  if (savedScrollPos) {
-    // Restore scroll position immediately
-    window.scrollTo(0, parseInt(savedScrollPos, 10));
-    sessionStorage.removeItem('proposedDataScrollPos');
-    
-    // Make page visible again
-    document.documentElement.style.visibility = 'visible';
-    
-    // Also scroll the table to bottom and focus new row
-    if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
-      setTimeout(function () {
-        const scroller = $("proposedDataScroll");
-        const row = $("row-" + focusRowIndex);
-        
-        if (scroller && row) {
-          const rowTop = row.offsetTop;
-          scroller.scrollTop = Math.max(0, rowTop - Math.floor(scroller.clientHeight * 0.25));
-          
-          const firstCell = row.querySelector('input.business-cell:not([readonly])');
-          if (firstCell) {
-            firstCell.focus({ preventScroll: true });
-          }
-        }
-      }, 0);
-    }
-  } else if (focusRowIndex !== null && !Number.isNaN(focusRowIndex)) {
-    // No saved scroll position, just focus the new row normally
-    setTimeout(function () {
-      const scroller = $("proposedDataScroll");
-      const row = $("row-" + focusRowIndex);
-
-      if (scroller && row) {
-        const rowTop = row.offsetTop;
-        scroller.scrollTop = Math.max(0, rowTop - Math.floor(scroller.clientHeight * 0.25));
-        document.documentElement.style.visibility = 'visible';
-
-        const firstCell = row.querySelector('input.business-cell:not([readonly])');
-        if (firstCell) {
-          firstCell.focus({ preventScroll: true });
-        }
-      } else {
-        document.documentElement.style.visibility = 'visible';
-      }
-    }, 0);
+    display.style.display = "none";
+    editor.style.display  = "flex";
+    input.focus();
+    try { const len = input.value.length; input.setSelectionRange(len, len); } catch (_) {}
+    _activeCell = cell;
   }
 
+  function cteClose(cell, revert) {
+    const display = cell.querySelector(".pcf-cte-display");
+    const editor  = cell.querySelector(".pcf-cte-editor");
+    const input   = editor ? editor.querySelector("input, textarea") : null;
+    if (!display || !editor || !input) return;
 
+    if (revert) {
+      input.value = input.getAttribute("data-orig") || "";
+    }
 
+    // Sync display text
+    display.textContent = input.value;
 
-  // ---------- Save Draft modal actions ----------
+    editor.style.display  = "none";
+    display.style.display = "";
+
+    if (_activeCell === cell) _activeCell = null;
+
+    // Trigger dirty/save/submit recalc
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function cteInitCell(cell) {
+    if (cell.dataset.cteInit) return;
+    cell.dataset.cteInit = "1";
+
+    const display    = cell.querySelector(".pcf-cte-display");
+    const editor     = cell.querySelector(".pcf-cte-editor");
+    const input      = editor ? editor.querySelector("input, textarea") : null;
+    const okBtn      = editor ? editor.querySelector(".pcf-cte-ok") : null;
+    const cancelBtn  = editor ? editor.querySelector(".pcf-cte-x")  : null;
+
+    if (!display || !editor || !input) return;
+
+    display.addEventListener("click", function () { cteOpen(cell); });
+
+    if (okBtn) okBtn.addEventListener("click", function (e) {
+      e.stopPropagation(); cteClose(cell, false);
+    });
+    if (cancelBtn) cancelBtn.addEventListener("click", function (e) {
+      e.stopPropagation(); cteClose(cell, true);
+    });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && input.tagName !== "TEXTAREA") { e.preventDefault(); cteClose(cell, false); }
+      if (e.key === "Escape") cteClose(cell, true);
+    });
+  }
+
+  function cteInitAll() {
+    document.querySelectorAll(".pcf-cte").forEach(cteInitCell);
+  }
+
+  // Click outside → confirm close
+  document.addEventListener("click", function (e) {
+    if (!_activeCell) return;
+    if (!_activeCell.contains(e.target)) cteClose(_activeCell, false);
+  });
+
+  window.pcfInitCTE = cteInitAll;
+
+  // ══════════════════════════════════════════════════════════
+  // FORM SUBMIT INTERCEPTION (add_row scroll save)
+  // ══════════════════════════════════════════════════════════
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      const submitter = e.submitter;
+      if (!submitter) return;
+      if (submitter.value === "add_row") {
+        // Block if hidden rows exist (need save first)
+        const hidden = document.querySelectorAll("tr[id^='pcfRow-'][style*='display: none']");
+        if (hidden.length > 0) {
+          e.preventDefault();
+          alert("Please save your current changes before adding more rows.");
+          return;
+        }
+        sessionStorage.setItem("pcfScrollPos", window.pageYOffset || document.documentElement.scrollTop);
+        if (overviewOpen) overviewOpen.value = "1";
+      }
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // BULK UPLOAD MODAL
+  // ══════════════════════════════════════════════════════════
+  function syncBulkBtn() {
+    if (!bulkUploadBtn) return;
+    bulkUploadBtn.disabled = !(bulkCsvInput && bulkCsvInput.files && bulkCsvInput.files.length > 0);
+  }
+  if (bulkCsvInput) bulkCsvInput.addEventListener("change", syncBulkBtn);
+  if (bulkModalEl) {
+    bulkModalEl.addEventListener("shown.bs.modal", syncBulkBtn);
+    bulkModalEl.addEventListener("hidden.bs.modal", function () {
+      if (bulkCsvInput) bulkCsvInput.value = "";
+      syncBulkBtn();
+    });
+  }
+  syncBulkBtn();
+
+  // ══════════════════════════════════════════════════════════
+  // SAVE DRAFT MODAL ACTIONS
+  // ══════════════════════════════════════════════════════════
   function hideModal(el) {
     if (!el) return;
-    try {
-      const inst = bootstrap.Modal.getOrCreateInstance(el);
-      inst.hide();
-    } catch (e) {}
+    try { bootstrap.Modal.getOrCreateInstance(el).hide(); } catch (_) {}
   }
 
   function submitDraft(nextVal) {
     if (!form) return;
-    if (saveNext) saveNext.value = nextVal; // "stay" or "back"
+    if (saveNext) saveNext.value = nextVal;
     hideModal(saveModalEl);
-    setTimeout(function () {
-      form.requestSubmit();
-    }, 50);
+    setTimeout(function () { form.requestSubmit(); }, 50);
   }
 
   if (saveStayBtn) saveStayBtn.addEventListener("click", function () { submitDraft("stay"); });
   if (saveBackBtn) saveBackBtn.addEventListener("click", function () { submitDraft("back"); });
 
-  // ---------- Unsaved changes prompt ----------
+  // ══════════════════════════════════════════════════════════
+  // NAV GUARD (unsaved changes prompt)
+  // ══════════════════════════════════════════════════════════
   let navConfirmed = false;
 
   function isDirtyForNav() {
     if (rowsAddedCount > 0) return true;
-    if (document.querySelector("input.business-cell.mdu-dirty")) return true;
-    return makerFieldsDirty();
+    if (document.querySelector("input.pcf-business-cell.pcf-dirty")) return true;
+    return metaFieldsDirty();
   }
 
-  function bindNavConfirm(el) {
+  function bindNavGuard(el) {
     if (!el) return;
     el.addEventListener("click", function (e) {
-      if (navConfirmed) return;
-      if (!isDirtyForNav()) return;
-
-      const ok = confirm("You Have Unsaved Changes. Leave This Page Without Saving?");
-      if (!ok) {
-        e.preventDefault();
-        return;
+      if (navConfirmed || !isDirtyForNav()) return;
+      if (!confirm("You have unsaved changes. Leave this page without saving?")) {
+        e.preventDefault(); return;
       }
       navConfirmed = true;
     });
   }
+  bindNavGuard(backBtn);
+  bindNavGuard(cancelBtn);
 
-  bindNavConfirm(backBtn);
-  bindNavConfirm(cancelBtn);
-
-  // ---------- Auto-dismiss "Rows Added" notification ----------
-(function () {
-    const notice = document.getElementById("rowsAddedNotice");
+  // ══════════════════════════════════════════════════════════
+  // ROWS-ADDED NOTICE AUTO-DISMISS
+  // ══════════════════════════════════════════════════════════
+  (function () {
+    const notice = $id("pcfRowsNotice");
     if (!notice) return;
-
-    // Auto-hide after 30 seconds (adjust later if needed)
-    window.setTimeout(function () {
-      // If Bootstrap JS is available, use its alert close animation
+    setTimeout(function () {
       try {
-        if (window.bootstrap && bootstrap.Alert) {
-          const inst = bootstrap.Alert.getOrCreateInstance(notice);
-          inst.close();
-          return;
-        }
-      } catch (e) {}
-
-      // Fallback: remove from DOM
+        if (window.bootstrap && bootstrap.Alert) { bootstrap.Alert.getOrCreateInstance(notice).close(); return; }
+      } catch (_) {}
       notice.remove();
     }, 5000);
   })();
+
+  // ══════════════════════════════════════════════════════════
+  // INITIALISE
+  // ══════════════════════════════════════════════════════════
+
+  // Set up op badges and retire state for existing rows
+  document.querySelectorAll("tr[id^='pcfRow-']").forEach(function (tr) {
+    const m = (tr.id || "").match(/^pcfRow-(\d+)$/);
+    if (!m) return;
+    const rowIndex = parseInt(m[1], 10);
+
+    const opCode = $id(`pcfOpCode-${rowIndex}`);
+    const opNow  = (opCode ? opCode.value : "").toUpperCase().trim();
+    const delInput = $id(`pcfRowDelete-${rowIndex}`);
+
+    // Align hidden retire flag if payload says RETIRE ROW
+    if ((opNow === "RETIRE ROW" || opNow === "DELETE") && delInput) delInput.value = "1";
+
+    if (delInput && delInput.value === "1") {
+      applyRetireUI(rowIndex, true);
+    } else {
+      deriveRowIntent(rowIndex);
+    }
+  });
+
+  recomputeAllDirty();
+  updateSaveDraftState();
+  cteInitAll();
+
+  // ── Restore scroll + focus after add_row ─────────────────
+  if (savedScrollPos) {
+    window.scrollTo(0, parseInt(savedScrollPos, 10));
+    sessionStorage.removeItem("pcfScrollPos");
+    document.documentElement.style.visibility = "visible";
+
+    if (focusRowIndex !== null && !isNaN(focusRowIndex)) {
+      setTimeout(function () {
+        const row = $id("pcfRow-" + focusRowIndex);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+          const firstCte = row.querySelector(".pcf-cte");
+          if (firstCte) cteOpen(firstCte);
+        }
+      }, 80);
+    }
+  } else if (focusRowIndex !== null && !isNaN(focusRowIndex)) {
+    setTimeout(function () {
+      const row = $id("pcfRow-" + focusRowIndex);
+      document.documentElement.style.visibility = "visible";
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        const firstCte = row.querySelector(".pcf-cte");
+        if (firstCte) cteOpen(firstCte);
+      }
+    }, 80);
+  } else {
+    document.documentElement.style.visibility = "visible";
+  }
 
 })();

@@ -91,13 +91,19 @@ def change_modal(request, pk):
         key = _row_key(a or b, i)
 
         cells = []
+        row_changed = False
         for col in biz_cols:
             tech = col["tech"]
             bv = (b.get(tech) or "").strip()
             av = (a.get(tech) or "").strip()
-            cells.append({"before": bv, "after": av, "changed": bv != av})
+            changed = bv != av
+            if changed:
+                row_changed = True
+            cells.append({"before": bv, "after": av, "changed": changed})
 
-        diff_rows.append({"key": key, "cells": cells})
+        diff_rows.append({"key": key, "cells": cells, "row_changed": row_changed})
+
+    changed_count = sum(1 for r in diff_rows if r.get("row_changed"))
 
     return render(
         request,
@@ -109,5 +115,6 @@ def change_modal(request, pk):
             "proposed_rows": after_rows,
             "biz_cols": biz_cols,
             "diff_rows": diff_rows,
+            "changed_count": changed_count,
         },
     )

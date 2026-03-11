@@ -19,14 +19,7 @@
   margin-bottom: 1.5rem;
 }
 
-.hd-crumb {
-  font-size: .78rem;
-  color: #8a8a9a;
-  margin-bottom: 2px;
-}
 
-.hd-crumb a { color: #8a8a9a; text-decoration: none; }
-.hd-crumb a:hover { color: #4f46e5; }
 
 .hd-header h3 {
   font-weight: 700;
@@ -369,9 +362,6 @@
 <!-- ====== Page header ====== -->
 <div class="hd-header">
   <div>
-    <div class="hd-crumb">
-      <a href="{% url 'mdu:catalog' %}">Catalog</a> &rsaquo; {{ header.ref_name }}
-    </div>
     <h3>{{ header.ref_name }}</h3>
     <div class="hd-subtitle">Reference detail and approved data.</div>
   </div>
@@ -531,11 +521,20 @@
     <!-- Description -->
     {% if is_steward or is_approver %}
     <div style="display:flex; justify-content:flex-end; margin-bottom:.6rem;">
-      <a class="hd-btn-primary"
-         href="{% url 'mdu:header_edit' header.pk %}"
-         style="font-size:.84rem;">
-        Edit Meta Data
-      </a>
+      {% if header.last_approved_change %}
+        <a class="hd-btn-primary"
+           href="{% url 'mdu:propose_change' header_pk=header.pk %}"
+           style="font-size:.84rem;"
+           title="Changes to metadata require approval once a reference has been approved">
+          Propose Metadata Change
+        </a>
+      {% else %}
+        <a class="hd-btn-primary"
+           href="{% url 'mdu:header_edit' header.pk %}"
+           style="font-size:.84rem;">
+          Edit Meta Data
+        </a>
+      {% endif %}
     </div>
     {% endif %}
     {% if header.description %}

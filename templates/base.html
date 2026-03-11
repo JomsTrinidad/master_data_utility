@@ -36,6 +36,32 @@
     .navbar-dark .navbar-nav .nav-link:not(.nav-link-active):hover {
       color: rgba(255,255,255,.85);
     }
+
+    /* ── Global breadcrumb ─────────────────────────────────── */
+    .mdu-breadcrumb-nav {
+      display: flex;
+      align-items: center;
+      gap: .25rem;
+      font-size: .82rem;
+      margin-bottom: .35rem;
+      flex-wrap: wrap;
+    }
+    .mdu-bc-link {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .mdu-bc-link:hover { text-decoration: underline; }
+    .mdu-bc-sep {
+      color: #94a3b8;
+      font-size: .85rem;
+      line-height: 1;
+      user-select: none;
+    }
+    .mdu-bc-current {
+      color: #374151;
+      font-weight: 500;
+    }
   </style>
 
 
@@ -103,16 +129,15 @@
     {% endfor %}
 
     {% if breadcrumbs %}
-      <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb small mb-0">
-          {% for crumb in breadcrumbs %}
-            {% if crumb.url %}
-              <li class="breadcrumb-item"><a href="{{ crumb.url }}">{{ crumb.label }}</a></li>
-            {% else %}
-              <li class="breadcrumb-item active" aria-current="page">{{ crumb.label }}</li>
-            {% endif %}
-          {% endfor %}
-        </ol>
+      <nav aria-label="breadcrumb" class="mdu-breadcrumb-nav">
+        {% for crumb in breadcrumbs %}
+          {% if crumb.url %}
+            <a href="{{ crumb.url }}" class="mdu-bc-link">{{ crumb.label }}</a>
+            <span class="mdu-bc-sep">&rsaquo;</span>
+          {% else %}
+            <span class="mdu-bc-current">{{ crumb.label }}</span>
+          {% endif %}
+        {% endfor %}
       </nav>
     {% endif %}
 

@@ -30,10 +30,14 @@ def _crumb(label, url=None):
     return {"label": label, "url": url}
 
 def _role_flags(user):
+    is_maker    = in_group(user, "maker")
+    is_steward  = in_group(user, "steward")
+    is_approver = in_group(user, "approver")
     return {
-        "is_maker": in_group(user, "maker"),
-        "is_steward": in_group(user, "steward"),
-        "is_approver": in_group(user, "approver"),
+        "is_maker":      is_maker,
+        "is_steward":    is_steward,
+        "is_approver":   is_approver,
+        "can_edit_rows": is_maker or is_steward,
     }
 
 def _ref_kind_label(header: MDUHeader) -> str:
@@ -685,6 +689,174 @@ def _current_baseline_for_header(header: MDUHeader) -> tuple[str, int | None]:
     return baseline_payload, None
 
 
+# ── Header metadata helpers ──────────────────────────────────────────────────
+
+# The governed MDUHeader fields that flow through the proposal workflow.
+_HEADER_META_FIELDS = [
+    ("description",                    "Description",                    "textarea"),
+    ("category",                       "Category",                       "text"),
+    ("data_classification",            "Data Classification",            "select"),
+    ("collaboration_mode",             "Collaboration Mode",             "select"),
+    ("owning_domain_lob",              "Owning Domain / LOB",            "text"),
+    ("approval_model",                 "Approval Model",                 "select"),
+    ("approval_scope",                 "Approval Scope",                 "select"),
+    ("approver_group_mapping",         "Approver Group Mapping",         "textarea"),
+    ("owner_group",                    "Owner Group",                    "text"),
+    ("tags",                           "Tags",                           "text"),
+    ("effective_dating_rules",         "Effective Dating Rules",         "text"),
+    ("history_retention_expectations", "History Retention Expectations", "text"),
+]
+
+_HEADER_META_CHOICES = {
+    "data_classification": dict(MDUHeader.DataClassification.choices),
+    "collaboration_mode":  dict(MDUHeader.CollaborationMode.choices),
+    "approval_model":      dict(MDUHeader.ApprovalModel.choices),
+    "approval_scope":      dict(MDUHeader.ApprovalScope.choices),
+}
+
+
+def _extract_header_metadata_snapshot(header: MDUHeader) -> dict:
+    """Return {field: str_value} for all governed metadata fields."""
+    return {
+        field: str(getattr(header, field, "") or "")
+        for field, _label, _ftype in _HEADER_META_FIELDS
+    }
+
+
+def _inject_metadata_into_payload(payload_json: str, snapshot: dict) -> str:
+    """Add/replace the top-level header_metadata key in payload JSON."""
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        obj = {}
+    if not isinstance(obj, dict):
+        obj = {}
+    obj["header_metadata"] = snapshot
+    return json.dumps(obj, indent=2)
+
+
+def _apply_header_metadata_from_post(payload_json: str, post_data) -> str:
+    """Read hm__<field> values from POST and merge into payload_json[header_metadata]."""
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        obj = {}
+    if not isinstance(obj, dict):
+        obj = {}
+    meta = obj.get("header_metadata")
+    if not isinstance(meta, dict):
+        meta = {}
+    for field, _label, _ftype in _HEADER_META_FIELDS:
+        key = f"hm__{field}"
+        if key in post_data:
+            meta[field] = (post_data[key] or "").strip()
+    obj["header_metadata"] = meta
+    return json.dumps(obj, indent=2)
+
+
+def _get_header_metadata_diff(ch, header: MDUHeader) -> list:
+    """
+    Compare header_metadata in ch.payload_json against current MDUHeader fields.
+    Returns list of {field, label, before, after, changed}.
+    """
+    try:
+        obj = json.loads(ch.payload_json or "{}")
+    except Exception:
+        return []
+    proposed_meta = obj.get("header_metadata")
+    if not isinstance(proposed_meta, dict):
+        return []
+    field_map = {f: (lbl, ft) for f, lbl, ft in _HEADER_META_FIELDS}
+    result = []
+    for field, value_after in proposed_meta.items():
+        if field not in field_map:
+            continue
+        label, _ftype = field_map[field]
+        value_before = str(getattr(header, field, "") or "")
+        choices = _HEADER_META_CHOICES.get(field, {})
+        result.append({
+            "field":   field,
+            "label":   label,
+            "before":  choices.get(value_before, value_before),
+            "after":   choices.get(str(value_after), str(value_after)),
+            "changed": value_before != str(value_after or ""),
+        })
+    return result
+
+
+def _apply_approved_metadata_to_header(ch, header: MDUHeader) -> None:
+    """Apply approved header_metadata from payload back to MDUHeader."""
+    try:
+        obj = json.loads(ch.payload_json or "{}")
+    except Exception:
+        return
+    proposed_meta = obj.get("header_metadata")
+    if not isinstance(proposed_meta, dict):
+        return
+    valid_fields = {f for f, _l, _ft in _HEADER_META_FIELDS}
+    update_fields = []
+    for field, new_val in proposed_meta.items():
+        if field not in valid_fields:
+            continue
+        current_val = str(getattr(header, field, "") or "")
+        new_val_str = str(new_val or "")
+        if current_val != new_val_str:
+            setattr(header, field, new_val_str)
+            update_fields.append(field)
+    if update_fields:
+        update_fields.append("updated_at")
+        header.save(update_fields=update_fields)
+
+
+def _has_any_proposed_change(payload_json: str, baseline_metadata: dict) -> bool:
+    """
+    Returns True if payload contains at least one substantive change:
+    any row op != KEEP ROW/empty, or any header_metadata value differs from baseline.
+    """
+    try:
+        obj = json.loads(payload_json or "{}")
+    except Exception:
+        return False
+    no_change_ops = {"KEEP ROW", ""}
+    for row in (obj.get("rows") or []):
+        if not isinstance(row, dict):
+            continue
+        if (row.get("row_type") or "").lower() != "values":
+            continue
+        op = (row.get("operation") or "").strip().upper()
+        if op not in no_change_ops:
+            return True
+    proposed_meta = obj.get("header_metadata")
+    if isinstance(proposed_meta, dict):
+        for field, new_val in proposed_meta.items():
+            if str(new_val or "") != str(baseline_metadata.get(field, "") or ""):
+                return True
+    return False
+
+
+def _build_header_meta_context(header: MDUHeader) -> dict:
+    """
+    Build resolved header_meta_fields list for template rendering.
+    Each entry: {field, label, field_type, value, choices}
+    Using this avoids dynamic getattr in templates.
+    """
+    fields = []
+    for field_name, label, field_type in _HEADER_META_FIELDS:
+        value = str(getattr(header, field_name, "") or "")
+        choices = _HEADER_META_CHOICES.get(field_name, [])
+        # Convert dict to list of (val, label) tuples for template iteration
+        if isinstance(choices, dict):
+            choices = list(choices.items())
+        fields.append({
+            "name":       field_name,
+            "label":      label,
+            "field_type": field_type,
+            "value":      value,
+            "choices":    choices,
+        })
+    return {"header_meta_fields": fields}
+
+
 @group_required("maker", "steward")
 def propose_change(request, header_pk):
     header = get_object_or_404(MDUHeader, pk=header_pk)
@@ -1013,6 +1185,9 @@ def propose_change(request, header_pk):
                 ]
             }, indent=2)
 
+        # Inject current header metadata snapshot so it travels with the payload
+        baseline_metadata_snapshot = _extract_header_metadata_snapshot(header)
+        initial_payload = _inject_metadata_into_payload(initial_payload, baseline_metadata_snapshot)
         baseline_payload_json = initial_payload
 
         form = ProposedChangeForm(initial={
@@ -1083,6 +1258,12 @@ def propose_change(request, header_pk):
             # Apply any edits from grid inputs into payload_json
             post["payload_json"] = _apply_cell_edits_to_payload_json(
                 post.get("payload_json", ""),
+                post
+            )
+
+            # Apply header metadata fields from POST (hm__<field> keys)
+            post["payload_json"] = _apply_header_metadata_from_post(
+                post["payload_json"],
                 post
             )
 
@@ -1245,9 +1426,12 @@ def propose_change(request, header_pk):
         "baseline_update_ids_json": json.dumps(compute_baseline_update_ids(baseline_payload_json)),
         "request_overview_open": request_overview_open,
 
-        # NEW: for scroll/focus + inline notification under table
+        # for scroll/focus + inline notification under table
         "focus_row_index": focus_row_index,
         "rows_added_count": rows_added_count,
+
+        # header metadata editing (resolved values for template)
+        **_build_header_meta_context(header),
 
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
@@ -1471,6 +1655,7 @@ def proposed_change_detail(request, pk):
             "added": added,
             "deleted": deleted,
         },
+        "header_metadata_diff": _get_header_metadata_diff(ch, ch.header),
         **_role_flags(request.user)
     })
 @group_required("maker","steward")
@@ -1534,10 +1719,20 @@ def proposed_change_edit(request, pk):
             else ""
         )
 
+        # Ensure current header metadata travels with the baseline
+        baseline_metadata_snapshot = _extract_header_metadata_snapshot(header)
+        baseline_payload_json = _inject_metadata_into_payload(baseline_payload_json, baseline_metadata_snapshot)
+
         form = ProposedChangeForm(instance=ch)
 
-        # Render the DRAFT payload (not the baseline)
+        # Render the DRAFT payload (not the baseline); inject metadata if absent
         payload = _normalize_payload_operations(ch.payload_json or baseline_payload_json)
+        try:
+            _pobj = json.loads(payload or "{}")
+        except Exception:
+            _pobj = {}
+        if "header_metadata" not in _pobj:
+            payload = _inject_metadata_into_payload(payload, baseline_metadata_snapshot)
         rows = payload_rows(payload)
         # Dirty cells must be computed on GET so highlighting survives reload/redirect
         dirty_cells = compute_dirty_cells(baseline_payload_json, payload)
@@ -1559,6 +1754,12 @@ def proposed_change_edit(request, pk):
         
         post["payload_json"] = _apply_cell_edits_to_payload_json(
             post.get("payload_json", ""),
+            post
+        )
+
+        # Apply header metadata fields from POST (hm__<field> keys)
+        post["payload_json"] = _apply_header_metadata_from_post(
+            post["payload_json"],
             post
         )
 
@@ -1825,6 +2026,8 @@ def proposed_change_edit(request, pk):
         "editing": True,
         "ch": ch,
         "change": ch,  # keep template compatibility if it expects 'change'
+        # header metadata editing (resolved values for template)
+        **_build_header_meta_context(header),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -1887,6 +2090,14 @@ def proposed_change_submit(request, pk):
         )
         return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
+    # Require at least one substantive change (row op or metadata diff)
+    baseline_metadata = _extract_header_metadata_snapshot(ch.header)
+    if not _has_any_proposed_change(ch.payload_json or "", baseline_metadata):
+        messages.error(
+            request,
+            "Cannot submit: no changes detected. Edit at least one row or one metadata field before submitting."
+        )
+        return redirect("mdu:proposed_change_detail", pk=ch.pk)
 
     ch.status = ChangeRequest.Status.SUBMITTED
     ch.submitted_at = timezone.now()
@@ -1932,6 +2143,8 @@ def proposed_change_decide(request, pk, decision):
             ch.save(update_fields=["status", "decided_at", "decision_note", "decided_by_sid", "updated_at"])
 
             header = ch.header
+            # Apply any proposed metadata changes back to the header
+            _apply_approved_metadata_to_header(ch, header)
             header.last_approved_change = ch
             header.status = MDUHeader.Status.ACTIVE
             header.save(update_fields=["last_approved_change", "status", "updated_at"])

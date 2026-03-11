@@ -151,6 +151,36 @@
 
 /* Changed cell highlight */
 .pcd-cell-changed { background: rgba(251,191,36,.08); }
+
+/* Metadata toggle link */
+.pcd-meta-toggle-link {
+  font-size: .84rem;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+.pcd-meta-toggle-link:hover { text-decoration: underline; }
+
+/* ── Before / after legend (matches compare_versions) ────── */
+.pcd-legend {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: .5rem .85rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: .8rem;
+  color: #475569;
+  margin-bottom: .85rem;
+  flex-wrap: wrap;
+}
+.pcd-legend-item { display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.pcd-legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+.pcd-legend-before { background: rgba(220,53,69,.18); border: 1px solid rgba(220,53,69,.35); }
+.pcd-legend-after  { background: rgba(25,135,84,.18); border: 1px solid rgba(25,135,84,.35); }
+.pcd-legend-label  { font-weight: 600; color: #1e293b; }
+.pcd-legend-divider { color: #cbd5e1; }
 </style>
 {% endblock %}
 
@@ -159,12 +189,6 @@
 <!-- Page header -->
 <div class="mdu-page-header">
   <div>
-    <div class="mdu-crumb">
-      <a href="{% url 'mdu:proposed_change_list' %}" style="color:#8a8a9a; text-decoration:none;">Proposed Changes</a>
-      &rsaquo;
-      <a href="{% url 'mdu:header_detail' pk=ch.header.pk %}" style="color:#8a8a9a; text-decoration:none;">{{ ch.header.ref_name }}</a>
-      &rsaquo; {{ ch.display_id }}
-    </div>
     <h3>{{ ch.header.ref_name }}</h3>
     <div class="mdu-subtitle">
       {{ ch.display_id }}
@@ -355,29 +379,169 @@
 {% endif %}
 
 
-<!-- ====== Diff Table ====== -->
-{% if diff_cols and diff_rows %}
+<!-- ====== Metadata Changes ====== -->
+{% with meta_changes=header_metadata_diff %}
 <details class="pcd-section" open>
   <summary>
-    <span class="pcd-section-title">Approved vs Proposed</span>
+    <span class="pcd-section-title">Reference Metadata Changes</span>
     <svg class="pcd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
   </summary>
   <div class="pcd-section-body">
 
-    <div class="pcd-view-bar">
-      <span class="pcd-view-hint">Compare latest approved data vs proposed values.</span>
+    {% if meta_changes %}
 
-      <div style="display:flex; gap:.6rem; align-items:center;">
-        <div class="pcd-toggle">
-          <a href="?view=all&format={{ diff_format }}" class="{% if view_mode == 'all' %}active{% endif %}">All Rows ({{ view_counts.all|default:0 }})</a>
-          <a href="?view=changes&format={{ diff_format }}" class="{% if view_mode == 'changes' %}active{% endif %}">Changes Only ({{ view_counts.changes|default:0 }})</a>
-        </div>
+      <table class="pcd-table" id="pcdMetaTable">
+        <thead>
+          <tr>
+            <th style="width:220px;">Field</th>
+            <th>Current Value</th>
+            <th>Proposed Value</th>
+            <th style="width:90px; text-align:center;">Changed?</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in meta_changes %}
+            <tr class="pcd-meta-row{% if not item.changed %} pcd-meta-unchanged{% endif %}">
+              <td style="font-weight:{% if item.changed %}600{% else %}400{% endif %}; color:{% if item.changed %}#0f172a{% else %}#64748b{% endif %};">{{ item.label }}</td>
+              <td class="{% if item.changed %}pcd-cell-changed{% endif %}" style="color:#475569;">
+                {% if item.before %}{{ item.before }}{% else %}<span class="pcd-empty">—</span>{% endif %}
+              </td>
+              <td class="{% if item.changed %}pcd-cell-changed{% endif %}">
+                {% if item.after %}{{ item.after }}{% else %}<span class="pcd-empty">—</span>{% endif %}
+              </td>
+              <td style="text-align:center;">
+                {% if item.changed %}
+                  <span class="pcd-op pcd-op-update" style="min-width:0; padding:.14rem .6rem;">Yes</span>
+                {% else %}
+                  <span style="color:#cbd5e1;">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
 
-        <a class="pcd-diff-link" href="?view={{ view_mode }}&format={% if diff_format == 'diff' %}clean{% else %}diff{% endif %}">
-          {% if diff_format == 'diff' %}Hide Differences{% else %}Show Differences{% endif %}
-        </a>
+      <div style="margin-top:.75rem;" id="pcdMetaToggleWrap"></div>
+
+    {% else %}
+      <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:5px; padding:.6rem 1rem; font-size:.875rem; color:#1d4ed8;">
+        No metadata changes in this request.
       </div>
+    {% endif %}
+
+  </div>
+</details>
+{% endwith %}
+
+<script>
+(function () {
+  var table    = document.getElementById("pcdMetaTable");
+  var wrapDiv  = document.getElementById("pcdMetaToggleWrap");
+  if (!table) return;
+
+  var allRows       = Array.from(table.querySelectorAll("tr.pcd-meta-row"));
+  var unchangedRows = allRows.filter(function (r) { return r.classList.contains("pcd-meta-unchanged"); });
+  var changedRows   = allRows.filter(function (r) { return !r.classList.contains("pcd-meta-unchanged"); });
+
+  var noChanges = (changedRows.length === 0);
+  var showingAll = noChanges;  // default: show all when nothing changed, show changes-only otherwise
+
+  function applyView() {
+    unchangedRows.forEach(function (r) { r.style.display = showingAll ? "" : "none"; });
+
+    if (noChanges) {
+      // Screenshot pattern: blue info bar with "Show all N fields" link
+      table.style.display = showingAll ? "" : "none";
+      if (wrapDiv) {
+        if (showingAll) {
+          // table is visible — show "hide" link
+          wrapDiv.innerHTML = "";
+        } else {
+          // table hidden — show info bar
+        }
+      }
+      // Actually: for no-changes case show the info bar above the table
+      var infoBar = document.getElementById("pcdMetaInfoBar");
+      if (!infoBar) {
+        infoBar = document.createElement("div");
+        infoBar.id = "pcdMetaInfoBar";
+        infoBar.style.cssText = "background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:.6rem 1rem;font-size:.875rem;color:#1d4ed8;margin-bottom:.75rem;";
+        table.parentNode.insertBefore(infoBar, table);
+      }
+      if (showingAll) {
+        infoBar.innerHTML = "No metadata changes detected. <a href='#' class='pcd-meta-toggle-link' style='color:#1d4ed8;'>Show only changed fields (none)</a>";
+        infoBar.style.display = "";
+        table.style.display = "";
+        // re-bind link (noop since no changes)
+      } else {
+        infoBar.innerHTML = "No metadata changes detected. <a href='#' id='pcdMetaShowAllLink' class='pcd-meta-toggle-link' style='color:#1d4ed8;'>Show all " + allRows.length + " fields</a>";
+        infoBar.style.display = "";
+        table.style.display = "none";
+        var sal = document.getElementById("pcdMetaShowAllLink");
+        if (sal) sal.addEventListener("click", function (e) {
+          e.preventDefault(); showingAll = true; applyView();
+        });
+      }
+    } else {
+      // Has changes: table always visible, toggle below
+      table.style.display = "";
+      if (wrapDiv) {
+        if (showingAll) {
+          wrapDiv.innerHTML = "<a href='#' class='pcd-meta-toggle-link'>Show only changed fields</a>";
+        } else {
+          wrapDiv.innerHTML = "<a href='#' class='pcd-meta-toggle-link'>Show all " + allRows.length + " fields</a>";
+        }
+        var link = wrapDiv.querySelector(".pcd-meta-toggle-link");
+        if (link) link.addEventListener("click", function (e) {
+          e.preventDefault(); showingAll = !showingAll; applyView();
+        });
+      }
+    }
+  }
+
+  applyView();
+})();
+</script>
+
+<!-- ====== Diff Table ====== -->
+{% if diff_cols and diff_rows %}
+<div class="pcd-section">
+  <div style="display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.4rem; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+    <span class="pcd-section-title">
+      Approved
+      <span style="color:#94a3b8; font-weight:400; margin:0 .4rem;">vs</span>
+      Proposed
+    </span>
+    <div style="display:flex; gap:.6rem; align-items:center;">
+      <div class="pcd-toggle">
+        <a href="?view=all&format={{ diff_format }}" class="{% if view_mode == 'all' %}active{% endif %}">All Rows ({{ view_counts.all|default:0 }})</a>
+        <a href="?view=changes&format={{ diff_format }}" class="{% if view_mode == 'changes' %}active{% endif %}">Changes Only ({{ view_counts.changes|default:0 }})</a>
+      </div>
+      <a class="pcd-diff-link" href="?view={{ view_mode }}&format={% if diff_format == 'diff' %}clean{% else %}diff{% endif %}">
+        {% if diff_format == 'diff' %}Hide Differences{% else %}Show Differences{% endif %}
+      </a>
     </div>
+  </div>
+
+  <div class="pcd-section-body">
+
+    {% if diff_format == 'diff' %}
+    <div class="pcd-legend">
+      <span class="pcd-legend-item">
+        <span class="pcd-legend-swatch pcd-legend-before"></span>
+        <span>Before</span>
+        <span class="pcd-legend-label">Approved</span>
+      </span>
+      <span class="pcd-legend-divider">·</span>
+      <span class="pcd-legend-item">
+        <span class="pcd-legend-swatch pcd-legend-after"></span>
+        <span>After</span>
+        <span class="pcd-legend-label">Proposed</span>
+      </span>
+      <span class="pcd-legend-divider">·</span>
+      <span style="color:#94a3b8; font-size:.78rem;">Strikethrough = current value &nbsp;·&nbsp; Bold green = proposed value</span>
+    </div>
+    {% endif %}
 
     <div class="pcd-table-wrap">
       <table class="pcd-table">
@@ -420,8 +584,8 @@
                 {% endif %}
               </td>
               {% if show_effective_dates %}
-                <td class="mdu-cell-meta">{{ r.start_dt|default:"" }}</td>
-                <td class="mdu-cell-meta">{{ r.end_dt|default:"" }}</td>
+                <td class="pcd-cell-meta">{{ r.start_dt|default:"" }}</td>
+                <td class="pcd-cell-meta">{{ r.end_dt|default:"" }}</td>
               {% endif %}
 
               {% for cell in r.cells %}
@@ -467,7 +631,7 @@
     </div>
 
   </div>
-</details>
+</div>
 {% endif %}
 
 {% endblock %}

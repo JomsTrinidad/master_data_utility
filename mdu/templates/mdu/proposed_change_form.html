@@ -2,509 +2,912 @@
 {% load mdu_extras %}
 {% load static %}
 {% block title %}Propose Change{% endblock %}
-{% block extra_head %}{% if focus_row_index is not None %}<script>document.documentElement.style.visibility="hidden";</script>{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+
+/* ── Page header ─────────────────────────────────────────── */
+.pcf-page-label {
+  font-size: .75rem;
+  color: #64748b;
+  font-weight: 500;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  margin-bottom: .2rem;
+}
+.pcf-page-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 .15rem;
+  line-height: 1.2;
+}
+.pcf-page-sub {
+  font-size: .85rem;
+  color: #64748b;
+  margin-bottom: 1.4rem;
+}
+
+/* ── Section card ────────────────────────────────────────── */
+.pcf-section {
+  border: 1px solid #dde1e7;
+  border-radius: 6px;
+  margin-bottom: 1.1rem;
+  background: #fff;
+  overflow: hidden;
+}
+.pcf-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .7rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  background: #f0f2f5;
+  border-bottom: 1px solid #dde1e7;
+  transition: background .12s;
+}
+.pcf-section:not([open]) summary { border-bottom: none; }
+.pcf-section summary:hover { background: #e8eaed; }
+.pcf-section summary::-webkit-details-marker { display: none; }
+.pcf-section summary::marker { display: none; }
+.pcf-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+}
+.pcf-section-title { font-weight: 600; font-size: .9rem; color: #1e293b; line-height: 1.3; }
+.pcf-section-sub   { font-size: .76rem; color: #94a3b8; font-weight: 400; }
+.pcf-chevron {
+  width: 16px; height: 16px; color: #94a3b8;
+  transition: transform .2s; flex-shrink: 0;
+}
+.pcf-section[open] .pcf-chevron { transform: rotate(180deg); }
+.pcf-section-body { padding: 1.1rem 1.25rem 1.3rem; }
+
+/* ── Metadata grid ───────────────────────────────────────── */
+.pcf-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .9rem 1.25rem;
+}
+@media (max-width: 768px) { .pcf-meta-grid { grid-template-columns: 1fr; } }
+.pcf-full { grid-column: 1 / -1; }
+
+.pcf-field-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  margin-bottom: .28rem;
+}
+.pcf-field-input {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: .42rem .75rem;
+  font-size: .875rem;
+  color: #111827;
+  background: #f8fafc;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.pcf-field-input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+  background: #fff;
+}
+.pcf-field-input[readonly], .pcf-field-input:disabled {
+  background: #f1f5f9; color: #94a3b8; cursor: default;
+}
+.pcf-field-input.is-invalid { border-color: #dc2626; }
+.pcf-field-hint { font-size: .72rem; color: #94a3b8; margin-top: .22rem; }
+select.pcf-field-input { appearance: auto; }
+textarea.pcf-field-input { resize: vertical; }
+
+.pcf-meta-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: .85rem;
+  padding-top: .75rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* ── Table ───────────────────────────────────────────────── */
+.pcf-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: auto;           /* both axes — needed for sticky to work */
+  max-height: 68vh;         /* vertical scroll so thead stays visible */
+  position: relative;
+}
+.pcf-table {
+  width: 100%;
+  border-collapse: separate; /* required for sticky borders to render */
+  border-spacing: 0;
+  font-size: .855rem;
+}
+
+/* ── Sticky header row ───────────────────────────────────── */
+.pcf-table thead tr {
+  background: #f8fafc;
+}
+.pcf-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #f8fafc;
+  border-bottom: 2px solid #cbd5e1;
+  /* re-apply border that border-separate removes */
+  border-right: 1px solid #e2e8f0;
+}
+.pcf-table thead th:last-child { border-right: none; }
+
+.pcf-table th {
+  padding: .6rem .9rem;
+  text-align: left;
+  font-size: .73rem;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.pcf-col-biz  { font-weight: 600; color: #2563eb; display: block; font-size: .8rem; }
+.pcf-col-tech { font-weight: 400; color: #94a3b8; font-size: .68rem; display: block; margin-top: 1px; }
+
+.pcf-table td {
+  padding: .48rem .9rem;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid transparent; /* placeholder — sticky cols override */
+  vertical-align: middle;
+  white-space: nowrap;
+  background: #fff; /* explicit bg so sticky cols paint over scrolled content */
+}
+.pcf-table tbody tr:last-child td { border-bottom: none; }
+.pcf-table tbody tr:hover td { background: #fafafa; }
+
+/* -- Sticky first 3 columns -------------------------------- */
+/*
+  Widths are locked so left offsets are exact.
+  Col 0: 46px  |  Col 1: 88px  |  Col 2: 104px
+  Col 1 left = 46   Col 2 left = 46+88 = 134
+*/
+.pcf-table th:nth-child(1),
+.pcf-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  width: 46px; min-width: 46px; max-width: 46px;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+.pcf-table th:nth-child(2),
+.pcf-table td:nth-child(2) {
+  position: sticky;
+  left: 46px;
+  z-index: 20;
+  width: 88px; min-width: 88px; max-width: 88px;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+.pcf-table th:nth-child(3),
+.pcf-table td:nth-child(3) {
+  position: sticky;
+  left: 134px;
+  z-index: 20;
+  width: 104px; min-width: 104px; max-width: 104px;
+  border-right: 2px solid #cbd5e1;
+  background: #fff;
+}
+/* Corner header cells: sticky on both axes */
+.pcf-table thead th:nth-child(1),
+.pcf-table thead th:nth-child(2),
+.pcf-table thead th:nth-child(3) {
+  z-index: 40;
+  background: #f8fafc;
+}
+
+/* -- Explicit row-state backgrounds (sticky cells need solid color) -- */
+.pcf-table tbody tr td                 { background: #fff; }
+.pcf-table tbody tr:hover td           { background: #f8fafc !important; }
+.pcf-row-header td                     { background: #f8fafc !important; }
+.pcf-row-dirty td                      { background: rgba(251,191,36,.07) !important; }
+.pcf-row-retired td                    { background: #fff5f5 !important; color: #b91c1c !important; opacity: .8; }
+.pcf-row-retired:hover td              { background: #fff5f5 !important; }
+.pcf-row-header td { color: #64748b; font-size: .78rem; }
+
+
+/* ── Operation badge ─────────────────────────────────────── */
+.pcf-op {
+  display: inline-block;
+  padding: .14rem .52rem;
+  border-radius: 4px;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  min-width: 76px;
+  text-align: center;
+}
+.pcf-op-keep   { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.pcf-op-insert { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.pcf-op-update { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.pcf-op-retire { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.pcf-op-header { background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; }
+
+/* ── Click-to-edit ───────────────────────────────────────── */
+.pcf-cte { position: relative; min-width: 80px; }
+.pcf-cte-display {
+  padding: .22rem .38rem;
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: 24px;
+  transition: background .12s;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  position: relative;
+}
+.pcf-cte-display:empty::before { content: "\00a0"; }
+.pcf-cte-display:hover { background: #eff6ff; }
+.pcf-cte:hover .pcf-cte-display::after {
+  content: "✎";
+  position: absolute;
+  right: 3px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: #93c5fd;
+}
+.pcf-cte-display.pcf-dirty { background: rgba(29,78,216,.07); color: #1d4ed8; font-weight: 600; }
+
+.pcf-cte-editor { display: none; align-items: center; gap: 3px; }
+.pcf-cte-editor input,
+.pcf-cte-editor textarea {
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  padding: .2rem .45rem;
+  font-size: .855rem;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+  min-width: 80px;
+  flex: 1;
+}
+.pcf-cte-editor textarea { resize: none; }
+.pcf-cte-actions { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.pcf-cte-ok, .pcf-cte-x {
+  border: none; background: none; cursor: pointer;
+  font-size: 11px; line-height: 1; padding: 2px 3px; border-radius: 3px;
+}
+.pcf-cte-ok { color: #16a34a; }
+.pcf-cte-ok:hover { background: #dcfce7; }
+.pcf-cte-x  { color: #dc2626; }
+.pcf-cte-x:hover  { background: #fee2e2; }
+
+/* disable CTE on retired rows */
+.pcf-row-retired .pcf-cte-display { cursor: default; pointer-events: none; }
+.pcf-row-retired .pcf-cte-display:hover { background: transparent; }
+.pcf-row-retired .pcf-cte:hover .pcf-cte-display::after { display: none; }
+
+/* ── Read-only column headers ────────────────────────────── */
+.pcf-th-readonly {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 500;
+}
+.pcf-th-readonly-icon {
+  display: inline-block;
+  font-style: normal;
+  margin-right: 3px;
+  opacity: .6;
+  font-size: .7rem;
+}
+/* Read-only cells (Row Type, Operation) */
+.pcf-cell-readonly {
+  color: #94a3b8;
+  font-size: .78rem;
+  cursor: default;
+  user-select: none;
+}
+
+/* -- Retire button: outlined circle (minus) / undo emoji --- */
+.pcf-retire-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid #cbd5e1;
+  background: #fff;
+  cursor: pointer;
+  color: #cbd5e1;
+
+  padding: 0;
+  font-size: 18px;
+    line-height: 1;
+  transition: border-color .12s, color .12s, background .12s;
+}
+.pcf-retire-btn:hover {
+  border-color: #fca5a5;
+  color: #dc2626;
+  background: #fff5f5;
+}
+/* Undo state — bare emoji, no circle */
+.pcf-retire-btn.is-undo {
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 15px;
+}
+.pcf-retire-btn.is-undo:hover {
+  color: #dc2626;
+  background: none;
+}
+
+/* ── Table footer / action bar ───────────────────────────── */
+.pcf-table-actions {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin-top: .8rem;
+  flex-wrap: wrap;
+}
+.pcf-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: 1rem;
+  padding: .75rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+}
+/* Save Draft becomes primary-style in the bar */
+#pcfSaveDraftBtn:not([disabled]) {
+  background: #1e40af;
+  color: #fff;
+  border-color: #1e40af;
+}
+#pcfSaveDraftBtn:not([disabled]):hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.pcf-btn {
+  border-radius: 5px; padding: .4rem 1rem;
+  font-size: .875rem; font-weight: 500; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap; text-decoration: none;
+  display: inline-flex; align-items: center; gap: .3rem;
+  line-height: 1.4;
+}
+.pcf-btn-primary   { background: #1e40af; color: #fff; border: 1px solid #1e40af; }
+.pcf-btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.pcf-btn-secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.pcf-btn-secondary:hover { background: #f9fafb; border-color: #9ca3af; color: #111827; }
+.pcf-btn-outline   { background: transparent; color: #2563eb; border: 1px solid #bfdbfe; }
+.pcf-btn-outline:hover { background: #eff6ff; }
+.pcf-btn-ghost     { background: transparent; color: #64748b; border: 1px solid transparent; }
+.pcf-btn-ghost:hover { background: #f1f5f9; border-color: #e2e8f0; }
+.pcf-btn-danger    { background: transparent; color: #dc2626; border: 1px solid #fca5a5; }
+.pcf-btn-danger:hover { background: #fff5f5; }
+.pcf-btn:disabled, .pcf-btn[disabled] { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+/* ── Flash messages ──────────────────────────────────────── */
+.pcf-msg {
+  padding: .55rem .85rem; border-radius: 5px; font-size: .855rem;
+  margin-bottom: .65rem; display: flex; align-items: flex-start; gap: .5rem;
+}
+.pcf-msg-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.pcf-msg-error   { background: #fff5f5; border: 1px solid #fecaca; color: #b91c1c; }
+.pcf-msg-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.pcf-msg-warning { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+.pcf-msg-close   { margin-left: auto; background: none; border: none; cursor: pointer; color: inherit; font-size: 1rem; line-height: 1; padding: 0; }
+
+/* ── Misc ────────────────────────────────────────────────── */
+.pcf-rows-notice {
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8;
+  border-radius: 5px; padding: .48rem .85rem; font-size: .84rem;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: .6rem;
+}
+.pcf-submit-help { font-size: .78rem; color: #dc2626; text-align: right; margin-top: .3rem; }
+
+</style>
+{% endblock %}
+
 {% block content %}
 
+<!-- UX meta (hidden, read by JS) -->
+<div id="pcfDraftUxMeta"
+     data-editing="{% if editing %}1{% else %}0{% endif %}"
+     data-focus-row-index="{{ focus_row_index|default_if_none:'' }}"
+     data-rows-added-count="{{ rows_added_count|default:0 }}"
+     style="display:none;"></div>
 
-<div class="d-none" data-editing="{% if editing %}1{% else %}0{% endif %}" id="editingFlag"></div>
+<!-- Page header -->
+<div class="pcf-page-label">{{ header.ref_name }}</div>
+<h1 class="pcf-page-title">Propose Change</h1>
+<p class="pcf-page-sub">Review the latest approved data, edit rows, save a draft, then submit for approval.</p>
 
-<div class="mb-3">
-  <div class="text-muted small">Reference</div>
-  <h3 class="mb-0">{{ header.ref_name }}</h3>
-  <div class="text-muted">Start From The Latest Approved Data, Edit Rows, Then Submit.</div>
-</div>
+<!-- Flash messages -->
+{% if messages %}
+  {% for message in messages %}
+    <div class="pcf-msg pcf-msg-{{ message.tags|default:'info' }}" role="alert">
+      <span>{{ message }}</span>
+      <button class="pcf-msg-close" type="button" onclick="this.closest('.pcf-msg').remove()">×</button>
+    </div>
+  {% endfor %}
+{% endif %}
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data" id="proposeForm">
-      {% csrf_token %}
+<form method="post" enctype="multipart/form-data" id="pcfForm">
+  {% csrf_token %}
 
-      <input type="hidden" name="baseline_payload_json" id="baselinePayload" value="{{ baseline_payload_json|default:''|escape }}">
-      
-      {% if editing %}
-        <input type="hidden" name="draft_uuid" value="{{ ch.draft_uuid }}">
-        <input type="hidden" name="lock_version" value="{{ ch.lock_version }}">
-      {% endif %}
+  <!-- System hidden fields -->
+  <input type="hidden" name="baseline_payload_json" id="pcfBaselinePayload"    value="{{ baseline_payload_json|default:''|escape }}">
+  <input type="hidden"                               id="pcfBaselineUpdateIds"  value="{{ baseline_update_ids_json|default:'{}'|escape }}">
+  <input type="hidden" name="request_overview_open" id="pcfOverviewOpen"       value="1">
+  <input type="hidden" name="save_next"             id="pcfSaveNext"           value="stay">
+  {% if editing %}
+    <input type="hidden" name="draft_uuid"    value="{{ ch.draft_uuid }}">
+    <input type="hidden" name="lock_version"  value="{{ ch.lock_version }}">
+  {% endif %}
 
 
+  <!-- ══════════════════════════════════
+       § 0  REFERENCE METADATA  (stewards / approvers only)
+  ════════════════════════════════════ -->\n  {% if is_steward or is_approver %}
+  <details class="pcf-section" id="pcfMetaSection" open>
+    <summary>
+      <div class="pcf-section-heading">
+        <span class="pcf-section-title">Reference Metadata</span>
+        <span class="pcf-section-sub">Propose changes to description, classification &amp; governance fields</span>
+      </div>
+      <svg class="pcf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+    </summary>
 
-      <input type="hidden" id="baselineUpdateIds" value="{{ baseline_update_ids_json|default:'{}'|escape }}">
+    <div class="pcf-section-body">
+      <div class="pcf-meta-grid">
 
-      
-      <input type="hidden" name="request_overview_open" id="requestOverviewOpen" value="{{ request_overview_open|default:'1' }}">
+        {% for f in header_meta_fields %}
+          <div{% if f.field_type == "textarea" %} class="pcf-full"{% endif %}>
+            <div class="pcf-field-label">{{ f.label }}</div>
+            {% if f.field_type == "select" %}
+              <select
+                name="hm__{{ f.name }}"
+                class="pcf-field-input pcf-hm-field"
+                data-orig="{{ f.value|escape }}"
+              >
+                {% for choice_val, choice_label in f.choices %}
+                  <option value="{{ choice_val }}"
+                    {% if f.value == choice_val %}selected{% endif %}
+                  >{{ choice_label }}</option>
+                {% endfor %}
+              </select>
+            {% elif f.field_type == "textarea" %}
+              <textarea
+                name="hm__{{ f.name }}"
+                class="pcf-field-input pcf-hm-field"
+                rows="3"
+                data-orig="{{ f.value|escape }}"
+              >{{ f.value|escape }}</textarea>
+            {% else %}
+              <input
+                type="text"
+                name="hm__{{ f.name }}"
+                class="pcf-field-input pcf-hm-field"
+                value="{{ f.value|escape }}"
+                data-orig="{{ f.value|escape }}"
+              >
+            {% endif %}
+          </div>
+        {% endfor %}
 
-      <input type="hidden" name="save_next" id="saveNext" value="stay">
-
-      <div id="draftUxMeta"
-      data-focus-row-index="{{ focus_row_index|default_if_none:'' }}"
-      data-rows-added-count="{{ rows_added_count|default:0 }}"
-      style="display:none;">
       </div>
 
-      <div class="row g-3">
-
-        <!-- Request Overview (Accordion) -->
-        <div class="col-12">
-          <div class="accordion mdu-request-overview" id="requestOverviewAccordion">
-            <div class="accordion-item">
-
-              <h2 class="accordion-header" id="headingRequestOverview">
-                <button
-                  id="requestOverviewToggle"
-                  class="accordion-button"
-                  type="button"
-                  data-bs-toggle="collapse"
-                  data-bs-target="#collapseRequestOverview"
-                  aria-expanded="{% if request_overview_open %}true{% else %}false{% endif %}"
-                  aria-controls="collapseRequestOverview">
-                  Request Overview
-                </button>
-              </h2>
-
-              <div
-                id="collapseRequestOverview"
-                class="accordion-collapse collapse {% if request_overview_open %}show{% endif %}"
-                aria-labelledby="headingRequestOverview"
-                data-bs-parent="#requestOverviewAccordion">
-
-                <div class="accordion-body pt-3">
-
-                  <div class="row g-4">
-
-                    <!-- Row 1: Tracking / Requested / Version / (spacer for alignment) -->
-                    <div class="col-md-4">
-                      <label class="form-label">Change Tracking ID</label>
-                      <input class="form-control form-control-sm" value="{{ form.tracking_id.value }}" readonly>
-                      <div class="form-text small">Used For Audit And Loader Matching.</div>
-                    </div>
-
-                    <div class="col-md-4">
-                      <label class="form-label">Change Ticket Reference</label>
-                      <input
-                        class="form-control form-control-sm {% if 'change_ticket_ref' in missing_required_fields %}is-invalid{% endif %}"
-                        name="change_ticket_ref"
-                        id="changeTicketRef"
-                        placeholder="ex: Jira-ID 12345"
-                        value="{{ form.change_ticket_ref.value|default:''|escape }}"
-                        data-orig="{{ form.change_ticket_ref.value|default:''|escape }}"
-                      >
-                    </div>                    
+      <div class="pcf-meta-actions" style="justify-content:flex-start; margin-top:.6rem;">
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:5px; padding:.5rem .85rem; font-size:.82rem; color:#1e40af; width:100%;">
+          <strong>Note:</strong> Changes here are proposed — they will only apply to the reference once this request is approved.
+        </div>
+      </div>
+    </div>
+  </details>
+  {% endif %}
 
 
-                    <div class="col-md-4">
-                      <label class="form-label">Change Category</label>
-                      <div id="changeCategoryWrap" data-orig="{{ form.change_category.value|default:''|escape }}">
-                        <select name="change_category"
-                                class="form-select form-select-sm {% if 'change_category' in missing_required_fields %}is-invalid{% endif %}">
-                          {% for v, lbl in form.fields.change_category.choices %}
-                            <option value="{{ v }}" {% if form.change_category.value == v %}selected{% endif %}>{{ lbl }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                    </div>
+  <!-- ══════════════════════════════════
+       § 1  REQUEST OVERVIEW
+  ════════════════════════════════════ -->
+  <details class="pcf-section" id="pcfOverviewSection" open>
+    <summary>
+      <div class="pcf-section-heading">
+        <span class="pcf-section-title">Request Overview</span>
+        <span class="pcf-section-sub">Tracking &middot; ticket &middot; reason</span>
+      </div>
+      <svg class="pcf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+    </summary>
 
-                    <div class="col-md-4">
-                      <label class="form-label">Requested By SID</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ request.user.username }}" readonly>
-                        <input type="hidden" name="requested_by_sid" value="{{ request.user.username|escape }}">
-                      {% else %}
-                        {{ form.requested_by_sid }}
-                      {% endif %}
-                    </div>
+    <div class="pcf-section-body">
+      <div class="pcf-meta-grid">
 
+        <div>
+          <div class="pcf-field-label">Change Tracking ID</div>
+          <input class="pcf-field-input" value="{{ form.tracking_id.value }}" readonly>
+          <div class="pcf-field-hint">Auto-generated. Used for audit and loader matching.</div>
+        </div>
 
+        <div>
+          <div class="pcf-field-label">Change Ticket Reference</div>
+          <input class="pcf-field-input {% if 'change_ticket_ref' in missing_required_fields %}is-invalid{% endif %}"
+                 name="change_ticket_ref" id="pcfTicketRef"
+                 placeholder="e.g. JIRA-12345"
+                 value="{{ form.change_ticket_ref.value|default:''|escape }}"
+                 data-orig="{{ form.change_ticket_ref.value|default:''|escape }}">
+        </div>
 
-
-                    <!-- Row 2: Approvers -->
-                    <div class="col-md-4">
-                      <label class="form-label">Business Owner SID</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.business_owner_sid.value|default:'' }}" readonly>
-                        <input type="hidden" name="business_owner_sid" value="{{ form.business_owner_sid.value|default:''|escape }}">
-                      {% else %}
-                        {{ form.business_owner_sid }}
-                      {% endif %}
-                    </div>
-
-                    <div class="col-md-4">
-                      <label class="form-label">Approver AD Group Name</label>
-                      {% if is_maker and not is_steward and not is_approver %}
-                        <input class="form-control form-control-sm" value="{{ form.approver_ad_group.value|default:'' }}" readonly>
-                        <input type="hidden" name="approver_ad_group" value="{{ form.approver_ad_group.value|default:''|escape }}">
-                      {% else %}
-                        {{ form.approver_ad_group }}
-                      {% endif %}
-                    </div>
-
-
-
-
-                    <!-- Row 3: Reason full width -->
-                    <div class="col-12">
-                      <label class="form-label">Change Reason</label>
-                      <textarea
-                        class="form-control form-control-sm {% if 'change_reason' in missing_required_fields %}is-invalid{% endif %}"
-                        name="change_reason"
-                        id="changeReason"
-                        placeholder="Explain the reason for this change request..."
-                        rows="3"
-                        value=""
-                        data-orig="{{ form.change_reason.value|default:''|escape }}"
-                      >{{ form.change_reason.value|default:''|escape }}</textarea>
-                    </div>
-
-                  </div>
-
-                  {% if editing %}
-                    <div class="d-flex justify-content-end gap-2 mt-3">
-                      <button class="btn btn-sm btn-outline-danger"
-                              type="submit"
-                              formmethod="post"
-                              formaction="{% url 'mdu:proposed_change_discard' pk=ch.pk %}">
-                        Discard Draft
-                      </button>
-                    </div>
-                  {% endif %}
-
-                </div>
-              </div>
-            </div>
+        <div>
+          <div class="pcf-field-label">Change Category</div>
+          <div id="pcfCategoryWrap" data-orig="{{ form.change_category.value|default:''|escape }}">
+            <select name="change_category"
+                    class="pcf-field-input {% if 'change_category' in missing_required_fields %}is-invalid{% endif %}">
+              {% for v, lbl in form.fields.change_category.choices %}
+                <option value="{{ v }}" {% if form.change_category.value == v %}selected{% endif %}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
 
-
-        {% if messages %}
-          <div class="mt-2" id="pageMessages">
-            {% for message in messages %}
-              <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show py-2 mb-2" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-
-
-
-
-        <!-- Proposed Data Table -->
-        <div class="col-12 mt-2">
-
-        <div class="d-flex align-items-center">
-          <div>
-            <div class="fw-semibold">Proposed Data</div>
-            <div class="text-muted small">Edit Business Values Below. Meta Columns Are Locked.</div>
-          </div>
-
-          <div class="ms-auto">
-            <a class="btn btn-outline-secondary mdu-btn-nav" id="backToReferenceBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
-              <span class="mdu-btn-icon">←</span> Back To Reference
-            </a>
-          </div>
+        <div>
+          <div class="pcf-field-label">Requested By SID</div>
+          {% if is_maker and not is_steward and not is_approver %}
+            <input class="pcf-field-input" value="{{ request.user.username }}" readonly>
+            <input type="hidden" name="requested_by_sid" value="{{ request.user.username|escape }}">
+          {% else %}
+            {{ form.requested_by_sid }}
+          {% endif %}
         </div>
 
+        <div>
+          <div class="pcf-field-label">Business Owner SID</div>
+          {% if is_maker and not is_steward and not is_approver %}
+            <input class="pcf-field-input" value="{{ form.business_owner_sid.value|default:'' }}" readonly>
+            <input type="hidden" name="business_owner_sid" value="{{ form.business_owner_sid.value|default:''|escape }}">
+          {% else %}
+            {{ form.business_owner_sid }}
+          {% endif %}
+        </div>
 
-          <div class="table-responsive sticky-table mt-2" id="proposedDataScroll">
+        <div>
+          <div class="pcf-field-label">Approver AD Group</div>
+          {% if is_maker and not is_steward and not is_approver %}
+            <input class="pcf-field-input" value="{{ form.approver_ad_group.value|default:'' }}" readonly>
+            <input type="hidden" name="approver_ad_group" value="{{ form.approver_ad_group.value|default:''|escape }}">
+          {% else %}
+            {{ form.approver_ad_group }}
+          {% endif %}
+        </div>
 
-            <table class="table table-hover align-middle mdu-table mdu-edit-table">
+        <div class="pcf-full">
+          <div class="pcf-field-label">Change Reason</div>
+          <textarea class="pcf-field-input {% if 'change_reason' in missing_required_fields %}is-invalid{% endif %}"
+                    name="change_reason" id="pcfChangeReason"
+                    placeholder="Explain the reason for this change request…"
+                    rows="3"
+                    data-orig="{{ form.change_reason.value|default:''|escape }}"
+          >{{ form.change_reason.value|default:''|escape }}</textarea>
+        </div>
 
-              <thead>
-                <tr class="sticky-first-row">
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-1 mdu-col-44"></th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-2">Row Type</th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-3">Operation</th>
-                  <th class="text-nowrap mdu-sticky-col mdu-sticky-col-4">
-                    Change Comment
-                    <button
-                      type="button"
-                      class="btn btn-link btn-sm p-0 ms-1 text-muted mdu-info"
-                      data-bs-toggle="tooltip"
-                      data-bs-title="Optional. Add context for reviewers. Not used by loaders."
-                      aria-label="More info">
-                      i
+      </div>
+
+      {% if editing %}
+        <div class="pcf-meta-actions">
+          <button class="pcf-btn pcf-btn-danger"
+                  type="submit" formmethod="post"
+                  formaction="{% url 'mdu:proposed_change_discard' pk=ch.pk %}">
+            Discard Draft
+          </button>
+        </div>
+      {% endif %}
+    </div>
+  </details>
+
+
+  <!-- ══════════════════════════════════
+       § 2  PROPOSED DATA TABLE
+  ════════════════════════════════════ -->
+  <details class="pcf-section" id="pcfDataSection" open>
+    <summary>
+      <div class="pcf-section-heading">
+        <span class="pcf-section-title">Proposed Data</span>
+        <span class="pcf-section-sub">Click any cell to edit &middot; changed cells highlighted</span>
+      </div>
+      <svg class="pcf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+    </summary>
+
+    <div class="pcf-section-body">
+      <div class="pcf-table-wrap">
+        <table class="pcf-table" id="pcfDataTable">
+
+          <thead>
+            <tr>
+              <th style="width:38px;"></th>
+              <th class="pcf-th-readonly">
+                <span class="pcf-th-readonly-icon">🔒</span>Row Type
+              </th>
+              <th class="pcf-th-readonly">
+                <span class="pcf-th-readonly-icon">🔒</span>Operation
+              </th>
+              <th>
+                Change Comment
+                <span style="font-size:.68rem; font-weight:400; color:#94a3b8; margin-left:3px;" title="Optional context for reviewers.">(optional)</span>
+              </th>
+              {% for c in visible_cols %}
+                <th>
+                  <span class="pcf-col-biz">{{ col_labels|get_item:c|default:c }}</span>
+                  <span class="pcf-col-tech">{{ c }}</span>
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for r in rows %}
+              {% with row_index=forloop.counter0 %}
+              <tr
+                {% if r.row_type|lower == "values" %}id="pcfRow-{{ row_index }}"{% endif %}
+                class="{% if r.row_type|lower == 'header' %}pcf-row-header{% endif %}{% if r.operation|default:''|upper == 'RETIRE ROW' %} pcf-row-retired{% endif %}"
+              >
+
+                <!-- Col 0: retire toggle -->
+                <td>
+                  {% if r.row_type|lower == "values" %}
+                    {% if is_maker or is_steward %}
+                    <button type="button"
+                            id="pcfRetireBtn-{{ row_index }}"
+                            class="pcf-retire-btn {% if r.operation|default:''|upper == 'RETIRE ROW' %}is-undo{% endif %}"
+                            data-row-index="{{ row_index }}"
+                            aria-label="{% if r.operation|default:''|upper == 'RETIRE ROW' %}Restore Row{% else %}Retire Row{% endif %}">
+                      {% if r.operation|default:''|upper == 'RETIRE ROW' %}
+                        <!-- plus / restore -->
+                        &#x21B6;
+                      {% else %}
+                        <!-- minus / retire -->
+                        &minus;
+                      {% endif %}
                     </button>
-                  </th>
-
-                  {% for c in visible_cols %}
-                    <th class="text-nowrap py-1 px-3">
-                      <div class="small fw-medium text-body-secondary">{{ col_labels|get_item:c|default:"" }}</div>
-                      <div class="small text-body-secondary">[<em>{{ c }}</em>]</div>
-                    </th>
-                  {% endfor %}
-                </tr>
-              </thead>
-
-
-              <tbody class="small">
-                {% for r in rows %}
-                  {% with row_index=forloop.counter0 %}
-                  <tr
-                    {% if r.row_type|lower == "values" %}
-                      id="row-{{ row_index }}"
+                    <input type="hidden" id="pcfRowDelete-{{ row_index }}" name="row_delete__{{ row_index }}"
+                           value="{% if r.operation|default:''|upper == 'RETIRE ROW' %}1{% else %}0{% endif %}">
                     {% endif %}
-                    class="{% if r.row_type|lower == 'header' %}bg-body-tertiary{% endif %}"
-                  >
+                  {% endif %}
+                </td>
 
-                    <!-- Trash / Undo (first column) -->
-                    <td class="text-nowrap mdu-sticky-col mdu-sticky-col-1">
-                      {% if r.row_type|lower == "values" and is_maker %}
-                        <button type="button"
-                                class="btn btn-sm btn-outline-secondary mdu-row-toggle-delete"
-                                data-row-index="{{ row_index }}"
-                                aria-label="Retire Row">
-                          🗑
-                        </button>
-                        <input type="hidden"
-                              id="rowDelete-{{ row_index }}"
-                              name="row_delete__{{ row_index }}"
-                              value="{% if r.operation|default:''|upper == 'RETIRE ROW' %}1{% else %}0{% endif %}">
-                      {% endif %}
-                    </td>
+                <!-- Col 1: row type -->
+                <td class="pcf-cell-readonly">{{ r.row_type|default:"" }}</td>
 
-                    <!-- Row Type -->
-                    <td class="text-nowrap mdu-sticky-col mdu-sticky-col-2">{{ r.row_type|default:"" }}</td>
+                <!-- Col 2: operation -->
+                <td class="pcf-cell-readonly">
+                  <input type="hidden" id="pcfOpCode-{{ row_index }}"      name="op__{{ row_index }}"           value="{{ r.operation|default:''|upper }}">
+                  <input type="hidden" id="pcfUpdateRowId-{{ row_index }}"  name="update_rowid__{{ row_index }}"  value="{{ r.update_rowid|default:'' }}">
+                  <span id="pcfOpBadge-{{ row_index }}" class="pcf-op pcf-op-{% if r.row_type|lower == 'header' %}header{% else %}keep{% endif %}">
+                    {% if r.row_type|lower == 'header' %}—{% endif %}
+                  </span>
+                </td>
 
-                    <!-- Operation (UI label, derived; never editable) -->
-                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-3 mdu-op-col">
-                      <input class="form-control form-control-sm text-start mdu-minw-10 {% if r.operation|default:''|upper == 'RETIRE ROW' %}text-danger{% endif %}"
-                            id="opLabel-{{ row_index }}"
-                            value="{% if r.row_type|lower == 'header' %}—{% endif %}"
-                            readonly>
-                      <input type="hidden"
-                            id="opCode-{{ row_index }}"
-                            name="op__{{ row_index }}"
-                            value="{{ r.operation|default:''|upper }}">
-                    </td>
-
-                    <!-- Update Row ID is system-owned (hidden). UI shows Change Comment instead. -->
-                    <td class="text-nowrap meta-locked mdu-sticky-col mdu-sticky-col-4">
-                      <input type="hidden"
-                            id="updateRowId-{{ row_index }}"
-                            name="update_rowid__{{ row_index }}"
-                            value="{{ r.update_rowid|default:'' }}">
-
-                      {% if r.row_type|lower == 'header' %}
-                        <input class="form-control form-control-sm" value="—" readonly>
-                      {% else %}
+                <!-- Col 3: change comment -->
+                <td>
+                  {% if r.row_type|lower == 'header' %}
+                    <span style="color:#94a3b8;">—</span>
+                  {% elif is_maker or is_steward %}
+                    <div class="pcf-cte" data-row-index="{{ row_index }}" data-col="change_comment">
+                      <div class="pcf-cte-display {% if dirty_cells|get_item:row_index|get_item:'change_comment' %}pcf-dirty{% endif %}"
+                           title="Click to edit">{{ r.change_comment|default:'' }}</div>
+                      <div class="pcf-cte-editor">
                         <textarea
-                          class="form-control form-control-sm business-cell change-comment-cell {% if dirty_cells|get_item:row_index|get_item:'change_comment' %}mdu-dirty{% endif %}"
-                          id="changeComment-{{ row_index }}"
+                          class="pcf-business-cell pcf-comment-cell"
                           name="change_comment__{{ row_index }}"
+                          id="pcfComment-{{ row_index }}"
                           rows="1"
                           data-row-index="{{ row_index }}"
+                          data-col="change_comment"
                           data-orig="{{ r.change_comment|default:''|escape }}"
                         >{{ r.change_comment|default:''|escape }}</textarea>
-                      {% endif %}
-                    </td>
-
-                    {% for c in visible_cols %}
-                      {% if is_maker and r.row_type|lower == "values" %}
-                        <td>
-                          <input
-                            class="form-control form-control-sm business-cell {% if dirty_cells|get_item:row_index|get_item:c %}mdu-dirty{% endif %}"
-                            name="cell__{{ row_index }}__{{ c }}"
-                            value="{{ r|get_item:c|default:'' }}"
-                            data-orig="{{ r|get_item:c|default:''|escape }}"
-                            data-row-index="{{ row_index }}"
-                            data-col="{{ c }}"
-                            {% if r.operation|default:''|upper == 'RETIRE ROW' %}readonly{% endif %}
-                          >
-                        </td>
-                      {% else %}
-                        <td>
-                          <input class="form-control form-control-sm" value="{{ r|get_item:c|default:'' }}" disabled>
-                        </td>
-                      {% endif %}
-                    {% endfor %}
-                  </tr>
-                  {% endwith %}
-                {% endfor %}
-              </tbody>
-
-
-              
-            </table>
-          </div>
-
-
-          {% if rows_added_count and rows_added_count|add:0 > 0 %}
-            <div class="alert alert-info py-2 mt-2 mb-0" role="alert" id="rowsAddedNotice">
-              {{ rows_added_count }} Row{% if rows_added_count|add:0 != 1 %}s{% endif %} Added.
-            </div>
-          {% endif %}
-
-
-
-          <hr class="my-3">
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-outline-primary" type="submit" name="action" value="add_row">
-                + Add New Row
-              </button>
-
-              <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
-                Populate Table From A File
-              </button>
-            </div>
-
-            <div class="d-flex align-items-center gap-2">
-              <a class="btn btn-outline-secondary mdu-btn-nav" id="cancelBtn" href="{% url 'mdu:header_detail' pk=header.pk %}">
-                <span class="mdu-btn-icon">←</span> Cancel
-              </a>
-
-              <button class="btn btn-outline-primary" type="button" id="saveDraftBtn" disabled
-                      data-bs-toggle="modal" data-bs-target="#saveDraftModal">
-                Save Draft
-              </button>
-
-              {% if editing %}
-              {# Progressive affordance: only enable submit after at least one save (editing screen) #}
-              <span id="submitBtnWrap" class="d-inline-block">
-                <button class="btn btn-primary" type="button" id="submitBtn" disabled
-                        data-bs-toggle="modal" data-bs-target="#submitConfirmModal">
-                  Submit For Approval
-                </button>
-              </span>
-              {% endif %}
-
-            </div>
-
-            <div class="small text-muted mt-1 {% if missing_required_fields %}{% else %}d-none{% endif %}" id="submitHelp">
-              Complete required fields to submit.
-            </div>
-          
-          </div>
-
-
-
-
-
-          <div class="modal fade" id="saveDraftModal" tabindex="-1" aria-labelledby="saveDraftModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content">
-
-                <div class="modal-header">
-                  <h5 class="modal-title" id="saveDraftModalLabel">Draft Saved</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-
-                <div class="modal-body">
-                  <div class="text-muted">You can keep editing or return to the reference page.</div>
-                </div>
-
-                <div class="modal-footer d-flex justify-content-between">
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary" id="saveDraftStayBtn">Keep Editing</button>
-                    <button type="button" class="btn btn-outline-secondary" id="saveDraftBackBtn">Return To Reference</button>
-                  </div>
-                  <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">Close</button>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-
-
-          <div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content">
-
-                <div class="modal-header">
-                  <h5 class="modal-title" id="submitConfirmModalLabel">Submit request?</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-
-                <div class="modal-body">
-                  <div class="mb-1">You won’t be able to edit once submitted.</div>
-                  <div class="text-muted small">Please confirm you’re ready to send this for approval.</div>
-                </div>
-
-                <div class="modal-footer">
-                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Go Back</button>
-
-                  {# IMPORTANT: update this URL name to your actual submit endpoint #}
-                  {% if editing %}
-                    <button type="submit"
-                            class="btn btn-primary"
-                            form="proposeForm"
-                            formmethod="post"
-                            formaction="{% url 'mdu:proposed_change_submit' pk=ch.pk %}">
-                      Submit
-                    </button>
+                        <div class="pcf-cte-actions">
+                          <button type="button" class="pcf-cte-ok">✓</button>
+                          <button type="button" class="pcf-cte-x">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  {% else %}
+                    <span style="color:#94a3b8;">{{ r.change_comment|default:'—' }}</span>
                   {% endif %}
-                </div>
+                </td>
 
-              </div>
-            </div>
-          </div>
+                <!-- Business columns -->
+                {% for c in visible_cols %}
+                  <td>
+                    {% if r.row_type|lower == "values" %}
+                      {% if is_maker or is_steward %}
+                        <div class="pcf-cte" data-row-index="{{ row_index }}" data-col="{{ c }}">
+                          <div class="pcf-cte-display {% if dirty_cells|get_item:row_index|get_item:c %}pcf-dirty{% endif %}"
+                               title="Click to edit">{{ r|get_item:c|default:'' }}</div>
+                          <div class="pcf-cte-editor">
+                            <input
+                              class="pcf-business-cell"
+                              name="cell__{{ row_index }}__{{ c }}"
+                              value="{{ r|get_item:c|default:'' }}"
+                              data-orig="{{ r|get_item:c|default:''|escape }}"
+                              data-row-index="{{ row_index }}"
+                              data-col="{{ c }}"
+                            >
+                            <div class="pcf-cte-actions">
+                              <button type="button" class="pcf-cte-ok">✓</button>
+                              <button type="button" class="pcf-cte-x">✕</button>
+                            </div>
+                          </div>
+                        </div>
+                      {% else %}
+                        <span style="color:#64748b;">{{ r|get_item:c|default:'' }}</span>
+                      {% endif %}
+                    {% else %}
+                      <span style="color:#64748b; font-size:.78rem;">{{ r|get_item:c|default:'' }}</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
 
-          <div class="d-none">
-            {{ form.payload_json }}
-          </div>
+              </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
 
-        </div>
-
+        </table>
       </div>
 
-    </form>
+      {% if rows_added_count and rows_added_count|add:0 > 0 %}
+        <div class="pcf-rows-notice" id="pcfRowsNotice">
+          <span>{{ rows_added_count }} row{% if rows_added_count|add:0 != 1 %}s{% endif %} added.</span>
+          <button type="button" style="background:none;border:none;cursor:pointer;color:#1d4ed8;"
+                  onclick="this.closest('.pcf-rows-notice').remove()">×</button>
+        </div>
+      {% endif %}
+
+      <div class="pcf-table-actions">
+        <button class="pcf-btn pcf-btn-outline" type="submit" name="action" value="add_row">+ Add Row</button>
+        <button type="button" class="pcf-btn pcf-btn-secondary"
+                data-bs-toggle="modal" data-bs-target="#pcfBulkModal">↑ Populate From File</button>
+      </div>
+
+    </div>
+  </details>
+
+
+  <!-- ══════════════════════════════════
+       ACTION BAR (sticky bottom, matches screenshot)
+  ════════════════════════════════════ -->
+  <div class="pcf-action-bar">
+    <a class="pcf-btn pcf-btn-ghost" id="pcfCancelBtn"
+       href="{% url 'mdu:header_detail' pk=header.pk %}">&#8592; Cancel</a>
+    <a class="pcf-btn pcf-btn-secondary" id="pcfBackBtn"
+       href="{% url 'mdu:header_detail' pk=header.pk %}">&#8592; Back to Reference</a>
+
+    <button class="pcf-btn pcf-btn-secondary" type="button" id="pcfSaveDraftBtn"
+            disabled data-bs-toggle="modal" data-bs-target="#pcfSaveDraftModal">
+      Save Draft
+    </button>
+
+    {% if editing %}
+    <span id="pcfSubmitWrap" style="display:inline-block;">
+      <button class="pcf-btn pcf-btn-primary" type="button" id="pcfSubmitBtn"
+              disabled data-bs-toggle="modal" data-bs-target="#pcfSubmitModal">
+        Submit for Approval
+      </button>
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="pcf-submit-help d-none" id="pcfSubmitHelp">
+    Complete all required fields and make at least one data change to submit.
+  </div>
+
+  <div style="display:none;">{{ form.payload_json }}</div>
+
+</form>
+
+
+<!-- Save Draft Modal -->
+<div class="modal fade" id="pcfSaveDraftModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1px solid #f1f5f9;">
+        <h5 class="modal-title" style="font-size:.92rem; font-weight:700;">Save Draft</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="font-size:.875rem; color:#475569;">
+        Your draft will be saved. You can keep editing or return to the reference page.
+      </div>
+      <div class="modal-footer" style="border-top:1px solid #f1f5f9; justify-content:space-between;">
+        <div style="display:flex; gap:.5rem;">
+          <button type="button" class="pcf-btn pcf-btn-primary"   id="pcfSaveStayBtn">Keep Editing</button>
+          <button type="button" class="pcf-btn pcf-btn-secondary" id="pcfSaveBackBtn">Return to Reference</button>
+        </div>
+        <button type="button" class="pcf-btn pcf-btn-ghost" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
   </div>
 </div>
 
-
-
-
-
-<div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-labelledby="bulkUploadModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+<!-- Submit Confirm Modal -->
+<div class="modal fade" id="pcfSubmitModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
     <div class="modal-content">
-
-      <div class="modal-header">
-        <h5 class="modal-title" id="bulkUploadModalLabel">Populate Table From A File</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header" style="border-bottom:1px solid #f1f5f9;">
+        <h5 class="modal-title" style="font-size:.92rem; font-weight:700;">Submit for Approval?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
+      <div class="modal-body" style="font-size:.875rem; color:#475569;">
+        <div>You won't be able to edit once submitted.</div>
+        <div style="font-size:.8rem; color:#94a3b8; margin-top:.3rem;">Please confirm you're ready to send this for approval.</div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid #f1f5f9;">
+        <button type="button" class="pcf-btn pcf-btn-secondary" data-bs-dismiss="modal">Go Back</button>
+        {% if editing %}
+          <button type="submit" class="pcf-btn pcf-btn-primary"
+                  form="pcfForm" formmethod="post"
+                  formaction="{% url 'mdu:proposed_change_submit' pk=ch.pk %}">
+            Submit
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 
-      <div class="modal-body">
-        <div class="text-muted small">
-          Download the template, fill it out, then upload it here. Rows will appear in the table (nothing is submitted yet).
+<!-- Bulk Upload Modal -->
+<div class="modal fade" id="pcfBulkModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:520px;">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1px solid #f1f5f9;">
+        <h5 class="modal-title" style="font-size:.92rem; font-weight:700;">Populate Table From a File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="font-size:.875rem; color:#475569;">
+        <p style="margin-bottom:.7rem;">Download the template, fill it in, then upload it here. Rows will be added to the table — nothing is submitted yet.</p>
+        <div style="margin-bottom:.7rem;">
+          <a href="{% url 'mdu:bulk_template_csv' header.pk %}" style="color:#2563eb; font-size:.84rem;">↓ Download Template CSV</a>
         </div>
-
-        <div class="mt-3">
-          <a class="small" href="{% url 'mdu:bulk_template_csv' header.pk %}">Download Template</a>
+        <div>
+          <div class="pcf-field-label">CSV File</div>
+          <input type="file" id="pcfBulkCsvInput" name="bulk_csv" accept=".csv,text/csv" class="pcf-field-input" form="pcfForm">
+          <div class="pcf-field-hint">Only use the template downloaded for this reference.</div>
         </div>
-
-        <div class="mt-3">
-          <label class="form-label">CSV File</label>
-          <input type="file" id="bulkCsvInput" name="bulk_csv" accept=".csv,text/csv" class="form-control" form="proposeForm">
-          <div class="form-text small">Only use the downloaded template for this reference.</div>
-        </div>
-
-        <div class="alert alert-warning py-2 mt-3 mb-0 small">
-          Tip: If nothing happens after upload, the file is usually missing values or has extra columns.
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:5px; padding:.45rem .7rem; margin-top:.7rem; font-size:.79rem; color:#b45309;">
+          Tip: If nothing happens after upload, the file may be missing values or have extra columns.
         </div>
       </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-        <button class="btn btn-primary" id="bulkUploadBtn" type="submit" name="action" value="bulk_upload" form="proposeForm" disabled>
+      <div class="modal-footer" style="border-top:1px solid #f1f5f9;">
+        <button type="button" class="pcf-btn pcf-btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="pcf-btn pcf-btn-primary" id="pcfBulkUploadBtn"
+                type="submit" name="action" value="bulk_upload" form="pcfForm" disabled>
           Populate Table
         </button>
       </div>
-
     </div>
   </div>
 </div>
 
 
-{{ dirty_cells|json_script:"dirtyCellsJson" }}
-
-
-
-
+{{ dirty_cells|json_script:"pcfDirtyCellsJson" }}
 <script src="{% static 'mdu/js/propose_change.js' %}"></script>
-
-
-
 
 {% endblock %}
