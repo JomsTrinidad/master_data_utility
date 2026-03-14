@@ -159,3 +159,13 @@ LOGGING = {
 
 # Ensure log directory exists
 os.makedirs(BASE_DIR / "logs", exist_ok=True)
+
+# ── Business Function choices (used by HeaderForm and header_form.html) ──────
+BUSINESS_FUNCTION_CHOICES = [
+    ("payments", "Payments"),
+    ("client_onboarding", "Client Onboarding"),
+    ("treasury", "Treasury Operations"),
+    ("investigations", "Investigations"),
+    ("compliance", "Compliance"),
+    ("risk", "Risk"),
+]

@@ -19,7 +19,7 @@ class MDUHeader(models.Model):
     class Status(models.TextChoices):
         # Locked lifecycle statuses across MDU (and later loader)
         ACTIVE = "ACTIVE", "Active"
-        IN_REVIEW = "IN_REVIEW", "In Review"
+        IN_REVIEW = "IN_REVIEW", "Pre-Publish"
         RETIRED = "RETIRED", "Retired"
 
     class DataClassification(models.TextChoices):

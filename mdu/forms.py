@@ -1,8 +1,31 @@
 from django import forms
+from django.conf import settings
 from .models import MDUHeader, ChangeRequest, MDUCert
 
 
 class HeaderForm(forms.ModelForm):
+    # Multi-select Business Function — stored comma-separated in owning_domain_lob
+    owning_domain_lob = forms.MultipleChoiceField(
+        choices=[],          # populated in __init__ from settings
+        required=False,
+        label="Business Function",
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = getattr(settings, "BUSINESS_FUNCTION_CHOICES", [])
+        self.fields["owning_domain_lob"].choices = choices
+
+        # Pre-populate from comma-separated string stored in the model
+        if self.instance and self.instance.pk:
+            raw = self.instance.owning_domain_lob or ""
+            self.initial["owning_domain_lob"] = [v.strip() for v in raw.split(",") if v.strip()]
+
+    def clean_owning_domain_lob(self):
+        values = self.cleaned_data.get("owning_domain_lob") or []
+        return ",".join(values)
+
     class Meta:
         model = MDUHeader
         fields = [
@@ -18,17 +41,12 @@ class HeaderForm(forms.ModelForm):
             "ref_type",
             "mode",
             "status",
-            "owner_group",
             "tags",
 
             # Workflow config
             "approval_model",
             "approval_scope",
             "approver_group_mapping",
-
-            # Lifecycle semantics (captured here; enforced later)
-            "effective_dating_rules",
-            "history_retention_expectations",
         ]
         widgets = {
             "tags": forms.TextInput(attrs={"placeholder": "Comma-separated (e.g., Country, Segmentation)"}),

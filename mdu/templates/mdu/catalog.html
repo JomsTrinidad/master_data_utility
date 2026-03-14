@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load django_tables2 %}
+{% load mdu_extras %}
 {% block title %}Catalog{% endblock %}
 
 {% block extra_head %}
@@ -215,18 +216,6 @@
 
 .cat-meta { white-space: nowrap; color: #495057; }
 
-.cat-badge-review {
-  display: inline-block;
-  padding: 3px 10px;
-  font-size: .76rem;
-  font-weight: 600;
-  color: #856404;
-  background: #fff8e1;
-  border: 1px solid #ffe082;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
 .cat-empty { color: #ced4da; }
 
 /* --- Pagination --- */
@@ -276,7 +265,10 @@
         <option value="">All</option>
         {% for value, label in filter.form.fields.status.choices %}
           {% if value %}
-            <option value="{{ value }}" {% if filter.form.status.value == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}"
+              {% if filter.form.status.value == value %}selected
+              {% elif not request.GET and value == "ACTIVE" %}selected              
+              {% endif %}>{{ label }}</option>
           {% endif %}
         {% endfor %}
       </select>
@@ -307,12 +299,7 @@
     </div>
   </div>
 
-  <div class="cat-filter-footer">
-    <label class="cat-check">
-      <input type="checkbox" name="include_all" value="1"
-             {% if request.GET.include_all %}checked{% endif %}>
-      Show non-active
-    </label>
+  <div class="cat-filter-footer" style="justify-content:flex-end;">
     <div class="cat-filter-actions">
       <a class="cat-btn-reset" href="{% url 'mdu:catalog' %}">Reset</a>
       <button class="cat-btn-apply" type="submit">Apply</button>
@@ -332,7 +319,7 @@
         <th>Type</th>
         <th>Mode</th>
         <th>Lifecycle Status</th>
-        <th>Change Status</th>
+        <th>Version · Rows</th>
         <th>Workflow</th>
         <th>Updated At</th>
       </tr>
@@ -348,18 +335,22 @@
           <td class="cat-meta">{{ row.ref_type }}</td>
           <td class="cat-meta">{{ row.mode }}</td>
           <td class="cat-meta">{{ row.get_status_display }}</td>
-          <td>
-            {% if row.has_pending %}
-              <span class="cat-badge-review">In review</span>
-            {% else %}
-              <span class="cat-empty">&mdash;</span>
-            {% endif %}
+          <td class="cat-meta">
+            {% with cnt=row_counts|get_item:row.pk %}
+              {% if row.last_approved_change and row.last_approved_change.version is not None %}
+                v{{ row.last_approved_change.version }} &middot; {{ cnt }}
+              {% elif cnt is not None %}
+                v&ndash; &middot; {{ cnt }}
+              {% else %}
+                <span class="cat-empty">&mdash;</span>
+              {% endif %}
+            {% endwith %}
           </td>
           <td class="cat-meta">{% if row.collaboration_mode == "COLLABORATIVE" %}Collab{% else %}Single{% endif %}</td>
           <td class="cat-meta">{{ row.updated_at|date:"m/d/Y g a" }}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="8" class="text-center text-muted py-4">No references found.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No references found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

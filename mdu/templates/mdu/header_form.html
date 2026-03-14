@@ -349,35 +349,40 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
           {% if form.ref_name.errors %}<div class="hf-error">{{ form.ref_name.errors.0 }}</div>{% endif %}
         </div>
 
-        {# Reference Type toggle: MAP / LIST #}
-        <div class="hf-field">
-          <label class="hf-label">Reference Type <span class="hf-required">*</span></label>
-          <div class="hf-toggle-group">
-            <input type="radio" name="ref_type" id="refType_map" value="map"
-                   {% if form.ref_type.value == "map" or not form.ref_type.value %}checked{% endif %}>
-            <label for="refType_map">Map</label>
-            <input type="radio" name="ref_type" id="refType_list" value="list"
-                   {% if form.ref_type.value == "list" %}checked{% endif %}>
-            <label for="refType_list">List</label>
-          </div>
-          <div class="hf-help">MAP: Key-value mapping &middot; LIST: Enumerated values</div>
-          {% if form.ref_type.errors %}<div class="hf-error">{{ form.ref_type.errors.0 }}</div>{% endif %}
-        </div>
+        {# Reference Type + Mode — 2-column grid #}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
 
-        {# Mode toggle: SNAPSHOT / VERSIONED #}
-        <div class="hf-field">
-          <label class="hf-label">Mode <span class="hf-required">*</span></label>
-          <div class="hf-toggle-group">
-            <input type="radio" name="mode" id="mode_snapshot" value="snapshot"
-                   {% if form.mode.value == "snapshot" %}checked{% endif %}>
-            <label for="mode_snapshot">Snapshot</label>
-            <input type="radio" name="mode" id="mode_versioning" value="versioning"
-                   {% if form.mode.value == "versioning" or not form.mode.value %}checked{% endif %}>
-            <label for="mode_versioning">Versioned</label>
+          {# Reference Type toggle: MAP / LIST #}
+          <div class="hf-field">
+            <label class="hf-label">Reference Type <span class="hf-required">*</span></label>
+            <div class="hf-toggle-group">
+              <input type="radio" name="ref_type" id="refType_map" value="map"
+                     {% if form.ref_type.value == "map" or not form.ref_type.value %}checked{% endif %}>
+              <label for="refType_map">Map</label>
+              <input type="radio" name="ref_type" id="refType_list" value="list"
+                     {% if form.ref_type.value == "list" %}checked{% endif %}>
+              <label for="refType_list">List</label>
+            </div>
+            <div class="hf-help">MAP: Key-value mapping &middot; LIST: Enumerated values</div>
+            {% if form.ref_type.errors %}<div class="hf-error">{{ form.ref_type.errors.0 }}</div>{% endif %}
           </div>
-          <div class="hf-help">SNAPSHOT: Dataset replaced &middot; VERSIONED: Row lifecycle tracking</div>
-          {% if form.mode.errors %}<div class="hf-error">{{ form.mode.errors.0 }}</div>{% endif %}
-        </div>
+
+          {# Mode toggle: SNAPSHOT / VERSIONED #}
+          <div class="hf-field">
+            <label class="hf-label">Data Change Mode <span class="hf-required">*</span></label>
+            <div class="hf-toggle-group">
+              <input type="radio" name="mode" id="mode_snapshot" value="snapshot"
+                     {% if form.mode.value == "snapshot" %}checked{% endif %}>
+              <label for="mode_snapshot">Snapshot</label>
+              <input type="radio" name="mode" id="mode_versioning" value="versioning"
+                     {% if form.mode.value == "versioning" or not form.mode.value %}checked{% endif %}>
+              <label for="mode_versioning">Versioned</label>
+            </div>
+            <div class="hf-help">SNAPSHOT: Dataset replaced &middot; VERSIONED: Row lifecycle tracking</div>
+            {% if form.mode.errors %}<div class="hf-error">{{ form.mode.errors.0 }}</div>{% endif %}
+          </div>
+
+        </div>{# /.2-col grid #}
 
       </div>
     </details>
@@ -386,42 +391,47 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
     {# ============================================================ #}
     {# SECTION 2: Governance Controls  (collapsed by default)       #}  
     {# ============================================================ #}
-    <details class="hf-section">
+    <details class="hf-section" open>
       <summary>
         <span class="hf-section-title">Governance Controls</span>
         <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
       </summary>
       <div class="hf-section-body">
 
-        {# Data Classification toggle: GENERAL / CLASSIFIED #}
-        <div class="hf-field">
-          <label class="hf-label">Data Classification <span class="hf-required">*</span></label>
-          <div class="hf-toggle-group">
-            <input type="radio" name="data_classification" id="dc_general" value="GENERAL"
-                   {% if form.data_classification.value == "GENERAL" or not form.data_classification.value %}checked{% endif %}>
-            <label for="dc_general">General</label>
-            <input type="radio" name="data_classification" id="dc_classified" value="CLASSIFIED"
-                   {% if form.data_classification.value == "CLASSIFIED" %}checked{% endif %}>
-            <label for="dc_classified">Classified</label>
-          </div>
-          <div class="hf-help">GENERAL: Broad visibility &middot; CLASSIFIED: Controlled access</div>
-          {% if form.data_classification.errors %}<div class="hf-error">{{ form.data_classification.errors.0 }}</div>{% endif %}
-        </div>
+        {# Data Classification + Workflow Type — 2-column grid #}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
 
-        {# Workflow Type toggle: SINGLE / COLLABORATIVE #}
-        <div class="hf-field">
-          <label class="hf-label">Workflow Type <span class="hf-required">*</span></label>
-          <div class="hf-toggle-group">
-            <input type="radio" name="collaboration_mode" id="cm_single" value="SINGLE_OWNER"
-                   {% if form.collaboration_mode.value == "SINGLE_OWNER" or not form.collaboration_mode.value %}checked{% endif %}>
-            <label for="cm_single">Single</label>
-            <input type="radio" name="collaboration_mode" id="cm_collab" value="COLLABORATIVE"
-                   {% if form.collaboration_mode.value == "COLLABORATIVE" %}checked{% endif %}>
-            <label for="cm_collab">Collaborative</label>
+          {# Data Classification toggle: GENERAL / CLASSIFIED #}
+          <div class="hf-field">
+            <label class="hf-label">Data Classification <span class="hf-required">*</span></label>
+            <div class="hf-toggle-group">
+              <input type="radio" name="data_classification" id="dc_general" value="GENERAL"
+                     {% if form.data_classification.value == "GENERAL" or not form.data_classification.value %}checked{% endif %}>
+              <label for="dc_general">General</label>
+              <input type="radio" name="data_classification" id="dc_classified" value="CLASSIFIED"
+                     {% if form.data_classification.value == "CLASSIFIED" %}checked{% endif %}>
+              <label for="dc_classified">Classified</label>
+            </div>
+            <div class="hf-help">GENERAL: Broad visibility &middot; CLASSIFIED: Controlled access</div>
+            {% if form.data_classification.errors %}<div class="hf-error">{{ form.data_classification.errors.0 }}</div>{% endif %}
           </div>
-          <div class="hf-help">SINGLE: One approver &middot; COLLABORATIVE: Multiple sign-offs</div>
-          {% if form.collaboration_mode.errors %}<div class="hf-error">{{ form.collaboration_mode.errors.0 }}</div>{% endif %}
-        </div>
+
+          {# Workflow Type toggle: SINGLE / COLLABORATIVE #}
+          <div class="hf-field">
+            <label class="hf-label">Workflow Type <span class="hf-required">*</span></label>
+            <div class="hf-toggle-group">
+              <input type="radio" name="collaboration_mode" id="cm_single" value="SINGLE_OWNER"
+                     {% if form.collaboration_mode.value == "SINGLE_OWNER" or not form.collaboration_mode.value %}checked{% endif %}>
+              <label for="cm_single">Single</label>
+              <input type="radio" name="collaboration_mode" id="cm_collab" value="COLLABORATIVE"
+                     {% if form.collaboration_mode.value == "COLLABORATIVE" %}checked{% endif %}>
+              <label for="cm_collab">Collaborative</label>
+            </div>
+            <div class="hf-help">SINGLE: One approver &middot; COLLABORATIVE: Multiple sign-offs</div>
+            {% if form.collaboration_mode.errors %}<div class="hf-error">{{ form.collaboration_mode.errors.0 }}</div>{% endif %}
+          </div>
+
+        </div>{# /.2-col grid #}
 
         {# Approver Group #}
         <div class="hf-field">
@@ -435,6 +445,29 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
           <div class="hf-help">Group responsible for final approval.</div>
           {% if form.approver_group_mapping.errors %}<div class="hf-error">{{ form.approver_group_mapping.errors.0 }}</div>{% endif %}
         </div>
+
+        {# Approval Model + Approval Scope — 2-column grid #}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
+
+          <div class="hf-field">
+            <label class="hf-label">Approval Model</label>
+            <select name="approval_model" class="hf-select">
+              {% for val, label in form.fields.approval_model.choices %}
+                <option value="{{ val }}" {% if form.approval_model.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="hf-field">
+            <label class="hf-label">Approval Scope</label>
+            <select name="approval_scope" class="hf-select">
+              {% for val, label in form.fields.approval_scope.choices %}
+                <option value="{{ val }}" {% if form.approval_scope.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+        </div>{# /.2-col grid #}
 
         {# Status: visible on edit only #}
         {% if mode == "edit" %}
@@ -458,22 +491,57 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
     {# ============================================================ #}
     {#   SECTION 3: Business Context  (collapsed by default)        #}
     {# ============================================================ #}
-    <details class="hf-section">
+    <details class="hf-section" open>
       <summary>
         <span class="hf-section-title">Business Context</span>
         <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
       </summary>
       <div class="hf-section-body">
 
-        {# Business Domain #}
-        <div class="hf-field">
-          <label class="hf-label">Business Domain <span class="hf-required">*</span></label>
-          <select name="owning_domain_lob" class="hf-select">
-            <option value="" {% if not form.owning_domain_lob.value %}selected{% endif %}>Select Business Domain</option>
-            {% if form.owning_domain_lob.value %}
-              <option value="{{ form.owning_domain_lob.value }}" selected>{{ form.owning_domain_lob.value }}</option>
-            {% endif %}
+        {# Category + Tags — 2-column grid at top of Business Context #}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
+
+          <div class="hf-field">
+            <label class="hf-label">Category</label>
+            <input type="text" name="category" class="hf-input"
+                   value="{{ form.category.value|default:'' }}" placeholder="e.g., Payments, Segmentation">
+          </div>
+
+          <div class="hf-field">
+            <label class="hf-label">Tags</label>
+            <input type="text" name="tags" class="hf-input"
+                   value="{{ form.tags.value|default:'' }}" placeholder="Comma-separated">
+          </div>
+
+        </div>{# /.2-col grid #}
+
+        {# Business Function (multi-select dropdown + pills) #}
+        <div class="hf-field" id="hf-bf-field">
+          <label class="hf-label" for="hf-bf-select">Business Function</label>
+
+          {# Hidden checkboxes carry the actual POST values — driven by JS #}
+          <div id="hf-bf-hidden">
+            {% for choice_val, choice_label in form.fields.owning_domain_lob.choices %}
+              <input type="checkbox"
+                     name="owning_domain_lob"
+                     value="{{ choice_val }}"
+                     id="hf-bf-chk-{{ forloop.counter }}"
+                     {% if choice_val in form.owning_domain_lob.value %}checked{% endif %}
+                     style="display:none;">
+            {% endfor %}
+          </div>
+
+          {# Pill display row #}
+          <div id="hf-bf-pills" style="display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.45rem; min-height:1px;"></div>
+
+          {# Visible dropdown — selecting an item toggles it #}
+          <select id="hf-bf-select" class="hf-select" style="width:100%;">
+            <option value="">— Select a Business Function —</option>
+            {% for choice_val, choice_label in form.fields.owning_domain_lob.choices %}
+              <option value="{{ choice_val }}" data-label="{{ choice_label }}">{{ choice_label }}</option>
+            {% endfor %}
           </select>
+
           {% if form.owning_domain_lob.errors %}<div class="hf-error">{{ form.owning_domain_lob.errors.0 }}</div>{% endif %}
         </div>
 
@@ -496,7 +564,7 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
             </div>
             <label class="hf-switch-track">
               <input type="checkbox" id="certRequired" name="cert_required" value="1"
-                     {% if form.effective_dating_rules.value == "cert_required" %}checked{% endif %}>
+                     {% if form.instance.pk and form.instance.effective_dating_rules == "cert_required" %}checked{% endif %}>
               <span class="hf-switch-slider"></span>
             </label>
           </div>
@@ -506,83 +574,72 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
     </details>
 
 
-    {# ============================================================ #}
-    {# SECTION 4: Advanced Settings  (collapsed by default)         #}
-    {# ============================================================ #}
-    <details class="hf-section">
-      <summary>
-        <span class="hf-section-title">Advanced Settings</span>
-        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
-      </summary>
-      <div class="hf-section-body">
-
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Category</label>
-              <input type="text" name="category" class="hf-input"
-                     value="{{ form.category.value|default:'' }}" placeholder="e.g., Payments, Segmentation">
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Tags</label>
-              <input type="text" name="tags" class="hf-input"
-                     value="{{ form.tags.value|default:'' }}" placeholder="Comma-separated">
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Approval Model</label>
-              <select name="approval_model" class="hf-select">
-                {% for val, label in form.fields.approval_model.choices %}
-                  <option value="{{ val }}" {% if form.approval_model.value == val %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Approval Scope</label>
-              <select name="approval_scope" class="hf-select">
-                {% for val, label in form.fields.approval_scope.choices %}
-                  <option value="{{ val }}" {% if form.approval_scope.value == val %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Effective Dating Rules</label>
-              <input type="text" name="effective_dating_rules" class="hf-input"
-                     value="{{ form.effective_dating_rules.value|default:'' }}">
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">History Retention</label>
-              <input type="text" name="history_retention_expectations" class="hf-input"
-                     value="{{ form.history_retention_expectations.value|default:'' }}">
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="hf-field">
-              <label class="hf-label">Owner Group</label>
-              <input type="text" name="owner_group" class="hf-input"
-                     value="{{ form.owner_group.value|default:'' }}">
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </details>
-
   </form>
 </div>
+
+<script>
+(function () {
+  var pillContainer = document.getElementById('hf-bf-pills');
+  var dropdown     = document.getElementById('hf-bf-select');
+  var hiddenWrap   = document.getElementById('hf-bf-hidden');
+  if (!pillContainer || !dropdown || !hiddenWrap) return;
+
+  function getChecked() {
+    return Array.from(hiddenWrap.querySelectorAll('input[type=checkbox]:checked'));
+  }
+
+  function renderPills() {
+    pillContainer.innerHTML = '';
+    getChecked().forEach(function (chk) {
+      var label = dropdown.querySelector('option[value="' + chk.value + '"]');
+      var text  = label ? label.dataset.label : chk.value;
+
+      var pill = document.createElement('span');
+      pill.style.cssText = [
+        'display:inline-flex', 'align-items:center', 'gap:.3rem',
+        'padding:.22em .65em', 'border-radius:4px',
+        'background:#1e293b', 'color:#fff',
+        'font-size:.78rem', 'font-weight:600',
+        'letter-spacing:.02em', 'cursor:default',
+      ].join(';');
+
+      var txt = document.createTextNode(text);
+      var x   = document.createElement('button');
+      x.type  = 'button';
+      x.textContent = '×';
+      x.dataset.val = chk.value;
+      x.style.cssText = 'background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:.9rem;line-height:1;padding:0 0 0 2px;';
+      x.addEventListener('click', function () {
+        var target = hiddenWrap.querySelector('input[value="' + this.dataset.val + '"]');
+        if (target) target.checked = false;
+        renderPills();
+        syncDropdown();
+      });
+
+      pill.appendChild(txt);
+      pill.appendChild(x);
+      pillContainer.appendChild(pill);
+    });
+  }
+
+  function syncDropdown() {
+    // Reset dropdown back to placeholder after each selection
+    dropdown.value = '';
+  }
+
+  dropdown.addEventListener('change', function () {
+    var val = this.value;
+    if (!val) return;
+    var chk = hiddenWrap.querySelector('input[value="' + val + '"]');
+    if (chk) {
+      chk.checked = true;  // toggle on (already-selected items can be removed via pill ×)
+    }
+    renderPills();
+    syncDropdown();
+  });
+
+  // Initial render for edit mode pre-population
+  renderPills();
+})();
+</script>
 {% endblock %}

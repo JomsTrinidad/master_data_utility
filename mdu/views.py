@@ -123,7 +123,7 @@ def _get_maker2_user():
 
 @login_required
 def catalog(request):
-    qs = MDUHeader.objects.all().order_by("ref_name")
+    qs = MDUHeader.objects.select_related("last_approved_change").all().order_by("ref_name")
 
     pending_submitted = ChangeRequest.objects.filter(
         header_id=OuterRef("pk"),
@@ -132,11 +132,12 @@ def catalog(request):
     qs = qs.annotate(has_pending=Exists(pending_submitted))
 
     # UX default: show Active only, unless user explicitly asks to include other statuses
-    include_all = request.GET.get("include_all") in ("1", "true", "True", "on")
-    has_status_filter = bool(request.GET.get("status"))
+    filter_submitted = any(k for k in request.GET if k != "page")
 
-    if not include_all and not has_status_filter:
+    if not filter_submitted:
         qs = qs.filter(status=MDUHeader.Status.ACTIVE)
+    elif request.GET.get("status"):
+        qs = qs.filter(status=request.GET["status"])
 
     f = HeaderFilter(request.GET, queryset=qs)
 
@@ -149,10 +150,22 @@ def catalog(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
+    # Compute current-version data row counts from the approved payload.
+    row_counts: dict[int, int] = {}
+    for header in page_obj.object_list:
+        lac = header.last_approved_change
+        if lac and lac.payload_json:
+            rows = payload_rows(lac.payload_json)
+            value_rows = [r for r in rows if isinstance(r, dict) and r.get("row_type") != "header"]
+            row_counts[header.pk] = len(value_rows)
+        else:
+            row_counts[header.pk] = 0
+
     return render(
         request,
         "mdu/catalog.html",
         {"filter": f, "table": table, "page_obj": page_obj,
+         "row_counts": row_counts,
          "breadcrumbs": [{"label": "Catalog", "url": None},],
          **_role_flags(request.user)},
     )
@@ -697,14 +710,11 @@ _HEADER_META_FIELDS = [
     ("category",                       "Category",                       "text"),
     ("data_classification",            "Data Classification",            "select"),
     ("collaboration_mode",             "Collaboration Mode",             "select"),
-    ("owning_domain_lob",              "Owning Domain / LOB",            "text"),
+    ("owning_domain_lob",              "Business Function",              "text"),
     ("approval_model",                 "Approval Model",                 "select"),
     ("approval_scope",                 "Approval Scope",                 "select"),
     ("approver_group_mapping",         "Approver Group Mapping",         "textarea"),
-    ("owner_group",                    "Owner Group",                    "text"),
     ("tags",                           "Tags",                           "text"),
-    ("effective_dating_rules",         "Effective Dating Rules",         "text"),
-    ("history_retention_expectations", "History Retention Expectations", "text"),
 ]
 
 _HEADER_META_CHOICES = {
