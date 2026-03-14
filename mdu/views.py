@@ -15,7 +15,7 @@ from django_tables2 import RequestConfig
 
 logger = logging.getLogger(__name__)
 
-from .models import MDUHeader, ChangeRequest, MDUCert
+from .models import MDUHeader, ChangeRequest, MDUCert, MDUColumnDef, MDUCompositeKey, MDUCompositeKeyField
 from .filters import HeaderFilter, ProposedChangeFilter
 from .tables import HeaderTable, ProposedChangeTable, CertTable
 from .forms import ProposedChangeForm, CertForm, HeaderForm
@@ -171,20 +171,188 @@ def catalog(request):
     )
 
 
+def _rs_rows_from_post(post_data):
+    """
+    Reconstruct existing_columns-shaped dicts from POST data so that
+    Row Structure rows survive re-render when other form fields fail validation.
+    Returns [] if no rs_field_name entries found.
+    """
+    field_names  = post_data.getlist("rs_field_name")
+    key_flags    = set(post_data.getlist("rs_is_key"))  # stringified indices
+    descriptions = post_data.getlist("rs_description")
+
+    result = []
+    for i, fn in enumerate(field_names):
+        result.append({
+            "field_name":        fn,
+            "is_key":            str(i) in key_flags,
+            "description":       descriptions[i] if i < len(descriptions) else "",
+            "display_order":     i + 1,
+            "placeholder_label": f"string_{(i + 1):02d}",
+        })
+    return result
+
+
+def _load_row_structure(header):
+    """
+    Return a list of dicts for pre-populating the Row Structure section.
+    Each dict: {field_name, is_key, description, display_order}
+    """
+    if not header or not header.pk:
+        return []
+    key_col_pks = set()
+    try:
+        ck = header.composite_key
+        key_col_pks = set(ck.fields.values_list("column_id", flat=True))
+    except MDUCompositeKey.DoesNotExist:
+        pass
+
+    result = []
+    for idx, col in enumerate(header.columns.order_by("pk"), start=1):
+        result.append({
+            "field_name":       col.ui_label or col.column_name,
+            "is_key":           col.pk in key_col_pks,
+            "description":      col.business_description,
+            "display_order":    idx,
+            "placeholder_label": col.column_name,
+        })
+    return result
+
+
+def _save_row_structure(header, post_data):
+    """
+    Parse field rows from POST, validate, and save MDUColumnDef + composite key.
+    Returns list of error strings (empty list = success).
+    Fully replaces existing column definitions for this header.
+    POST keys:
+      rs_field_name[]   — list of field name strings
+      rs_is_key[]       — list of stringified row indices that are key fields
+      rs_description[]  — list of description strings (parallel to field names)
+    """
+    field_names  = post_data.getlist("rs_field_name")
+    key_flags    = post_data.getlist("rs_is_key")    # e.g. ["0", "2"]
+    descriptions = post_data.getlist("rs_description")
+
+    n = len(field_names)
+    while len(descriptions) < n:
+        descriptions.append("")
+
+    cleaned = [fn.strip() for fn in field_names]
+    non_empty = [fn for fn in cleaned if fn]
+
+    errors = []
+    if not non_empty:
+        errors.append("Row Structure: at least one field must be defined.")
+        return errors
+
+    if len(non_empty) < 2:
+        errors.append("At least two fields must be defined in Row Structure.")
+        return errors
+
+    if n > 65:
+        errors.append("Row Structure: maximum of 65 fields allowed.")
+        return errors
+
+    seen = set()
+    for i, fn in enumerate(cleaned):
+        if not fn:
+            errors.append(f"Row Structure: field at position {i+1} has an empty name.")
+        elif fn.lower() in seen:
+            errors.append(f"Row Structure: duplicate field name \"{fn}\".")
+        else:
+            seen.add(fn.lower())
+
+    key_indices = set()
+    for v in key_flags:
+        if v.isdigit():
+            idx = int(v)
+            if idx < n and cleaned[idx]:
+                key_indices.add(idx)
+
+    if not key_indices:
+        errors.append("Row Structure: at least one key field must be selected.")
+
+    if errors:
+        return errors
+
+    with transaction.atomic():
+        header.columns.all().delete()
+        MDUCompositeKey.objects.filter(header=header).delete()
+
+        saved = []
+        for idx, (fn, desc) in enumerate(zip(cleaned, descriptions)):
+            if not fn:
+                continue
+            col = MDUColumnDef.objects.create(
+                header=header,
+                column_name=f"string_{(idx + 1):02d}",
+                ui_label=fn,
+                business_description=desc.strip(),
+            )
+            saved.append((idx, col))
+
+        key_cols = [(idx, col) for idx, col in saved if idx in key_indices]
+        if key_cols:
+            ck = MDUCompositeKey.objects.create(header=header)
+            for order, (_, col) in enumerate(key_cols, start=1):
+                MDUCompositeKeyField.objects.create(
+                    composite_key=ck, column=col, key_order=order
+                )
+
+    return []
+
+
 @group_required("steward", "approver")
 def header_create(request):
+    row_structure_errors = []
+    attestation_error = ""
+    rs_post_rows = []  # row structure rows echoed back from POST on re-render
+
     if request.method == "POST":
+        action = request.POST.get("action", "submit").strip()
         form = HeaderForm(request.POST)
+
+        # Always capture rs rows from POST so they survive re-render on any error
+        rs_post_rows = _rs_rows_from_post(request.POST)
+
         if form.is_valid():
-            header = form.save()
-            messages.success(request, "Reference created.")
-            return redirect("mdu:header_detail", pk=header.pk)
+            # Attestation required only for final submit, not draft saves
+            if action == "submit" and request.POST.get("hf_attested") != "1":
+                attestation_error = (
+                    "Please confirm the attestation before submitting."
+                )
+
+            else:
+                header = form.save()
+                errors = _save_row_structure(header, request.POST)
+                if errors:
+                    header.delete()
+                    row_structure_errors = errors
+                else:
+                    if action == "save_draft":
+                        messages.success(
+                            request,
+                            "Reference definition draft saved. "
+                            "You can continue editing it later from My Proposed Changes.",
+                        )
+                        return redirect("mdu:header_edit", pk=header.pk)
+                    else:
+                        messages.success(
+                            request,
+                            "Reference definition submitted for approval. "
+                            "It will now go through the approval process. "
+                            "You can track its status from My Proposed Changes.",
+                        )
+                        return redirect("mdu:header_detail", pk=header.pk)
     else:
         form = HeaderForm()
 
     return render(request, "mdu/header_form.html", {
         "form": form,
         "mode": "create",
+        "row_structure_errors": row_structure_errors,
+        "attestation_error": attestation_error,
+        "existing_columns": rs_post_rows or _load_row_structure(None),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb("New reference", None),
@@ -196,13 +364,42 @@ def header_create(request):
 @group_required("steward", "approver")
 def header_edit(request, pk):
     header = get_object_or_404(MDUHeader, pk=pk)
+    row_structure_errors = []
+    attestation_error = ""
+    rs_post_rows = []
 
     if request.method == "POST":
+        action = request.POST.get("action", "submit").strip()
         form = HeaderForm(request.POST, instance=header)
+
+        rs_post_rows = _rs_rows_from_post(request.POST)
+
         if form.is_valid():
-            form.save()
-            messages.success(request, "Reference updated.")
-            return redirect("mdu:header_detail", pk=header.pk)
+            if action == "submit" and request.POST.get("hf_attested") != "1":
+                attestation_error = (
+                    "Please confirm the attestation before submitting."
+                )
+            else:
+                form.save()
+                errors = _save_row_structure(header, request.POST)
+                if errors:
+                    row_structure_errors = errors
+                else:
+                    if action == "save_draft":
+                        messages.success(
+                            request,
+                            "Reference definition draft saved. "
+                            "You can continue editing it later from My Proposed Changes.",
+                        )
+                        return redirect("mdu:header_edit", pk=header.pk)
+                    else:
+                        messages.success(
+                            request,
+                            "Reference definition submitted for approval. "
+                            "It will now go through the approval process. "
+                            "You can track its status from My Proposed Changes.",
+                        )
+                        return redirect("mdu:header_detail", pk=header.pk)
     else:
         form = HeaderForm(instance=header)
 
@@ -210,6 +407,9 @@ def header_edit(request, pk):
         "form": form,
         "header": header,
         "mode": "edit",
+        "row_structure_errors": row_structure_errors,
+        "attestation_error": attestation_error,
+        "existing_columns": rs_post_rows or _load_row_structure(header),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),

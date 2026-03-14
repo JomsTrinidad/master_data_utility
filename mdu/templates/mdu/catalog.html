@@ -37,18 +37,18 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: .55rem 1.25rem;
+  padding: .45rem 1rem;
   font-size: .85rem;
-  font-weight: 600;
+  font-weight: 500;
   border: none;
-  border-radius: 8px;
-  background: #1a1a2e;
-  color: #fff;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
   text-decoration: none;
   white-space: nowrap;
-  transition: background .15s;
+  transition: background .12s, color .12s;
 }
-.cat-btn-new:hover { background: #2d2d4a; color: #fff; text-decoration: none; }
+.cat-btn-new:hover { background: #f3f4f6; color: #111827; text-decoration: none; }
 
 /* --- Filter bar --- */
 .cat-filter-card {
@@ -243,7 +243,7 @@
   </div>
 
   {% if is_steward or is_approver %}
-    <a class="cat-btn-new" href="{% url 'mdu:header_create' %}">+ New reference</a>
+    <a class="cat-btn-new" href="{% url 'mdu:header_create' %}">+ New Reference Definition</a>
   {% endif %}
 </div>
 
@@ -267,7 +267,7 @@
           {% if value %}
             <option value="{{ value }}"
               {% if filter.form.status.value == value %}selected
-              {% elif not request.GET and value == "ACTIVE" %}selected              
+              {% elif not request.GET and value == "ACTIVE" %}selected
               {% endif %}>{{ label }}</option>
           {% endif %}
         {% endfor %}
@@ -299,7 +299,8 @@
     </div>
   </div>
 
-  <div class="cat-filter-footer" style="justify-content:flex-end;">
+  <div class="cat-filter-footer" style="justify-content:flex-end;"> 
+
     <div class="cat-filter-actions">
       <a class="cat-btn-reset" href="{% url 'mdu:catalog' %}">Reset</a>
       <button class="cat-btn-apply" type="submit">Apply</button>
@@ -319,7 +320,7 @@
         <th>Type</th>
         <th>Mode</th>
         <th>Lifecycle Status</th>
-        <th>Version · Rows</th>
+        <th>Data Rows</th>
         <th>Workflow</th>
         <th>Updated At</th>
       </tr>
@@ -336,15 +337,13 @@
           <td class="cat-meta">{{ row.mode }}</td>
           <td class="cat-meta">{{ row.get_status_display }}</td>
           <td class="cat-meta">
-            {% with cnt=row_counts|get_item:row.pk %}
-              {% if row.last_approved_change and row.last_approved_change.version is not None %}
+            {% if row.last_approved_change and row.last_approved_change.version is not None %}
+              {% with cnt=row_counts|get_item:row.pk %}
                 v{{ row.last_approved_change.version }} &middot; {{ cnt }}
-              {% elif cnt is not None %}
-                v&ndash; &middot; {{ cnt }}
-              {% else %}
-                <span class="cat-empty">&mdash;</span>
-              {% endif %}
-            {% endwith %}
+              {% endwith %}
+            {% else %}
+              <span class="cat-empty">&mdash;</span>
+            {% endif %}
           </td>
           <td class="cat-meta">{% if row.collaboration_mode == "COLLABORATIVE" %}Collab{% else %}Single{% endif %}</td>
           <td class="cat-meta">{{ row.updated_at|date:"m/d/Y g a" }}</td>

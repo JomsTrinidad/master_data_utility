@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}
-  {% if mode == "edit" %}Edit Reference{% else %}Create New Reference{% endif %}
+  {% if mode == "edit" %}Edit Reference{% else %}Create Reference Definition{% endif %}
 {% endblock %}
 
 {% block extra_head %}
@@ -198,9 +198,10 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
 }
 
 .hf-toggle-group input[type="radio"]:checked + label {
-  background: #4f46e5;
+  background: #1e293b;
   color: #fff;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, .25);
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
+  font-weight: 600;
 }
 
 /* --- Toggle switch --- */
@@ -242,7 +243,7 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
   box-shadow: 0 1px 2px rgba(0,0,0,.15);
 }
 
-.hf-switch-track input:checked + .hf-switch-slider { background: #4f46e5; }
+.hf-switch-track input:checked + .hf-switch-slider { background: #1e293b; }
 .hf-switch-track input:checked + .hf-switch-slider::before { transform: translateX(20px); }
 
 .hf-switch-text { flex: 1; }
@@ -256,6 +257,51 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
 .hf-error { font-size: .78rem; color: #dc3545; margin-top: 4px; }
 
 /* --- Buttons --- */
+/* --- Error summary banner --- */
+.hf-error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  margin-bottom: 1.1rem;
+  font-size: .875rem;
+  color: #b91c1c;
+}
+.hf-error-banner-title {
+  font-weight: 700;
+  margin-bottom: .3rem;
+  font-size: .9rem;
+}
+.hf-error-banner ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.hf-error-banner li { margin-bottom: .15rem; }
+
+/* --- Field error highlight --- */
+.hf-input-error {
+  border-color: #dc2626 !important;
+  background: #fff5f5 !important;
+}
+select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !important; }
+
+/* --- Sticky footer action bar --- */
+.hf-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  padding: .75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+  flex-wrap: wrap;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+  margin: 1.5rem -12px -1.5rem;
+}
+
 .hf-btn-cancel {
   padding: .55rem 1.5rem;
   font-size: .88rem;
@@ -283,6 +329,19 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
 }
 .hf-btn-submit:hover { background: #2d2d4a; }
 
+.hf-btn-draft {
+  padding: .55rem 1.5rem;
+  font-size: .88rem;
+  font-weight: 600;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all .15s;
+}
+.hf-btn-draft:hover { background: #f1f5f9; border-color: #94a3b8; color: #111827; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .hf-section summary { padding: 1rem 1rem; }
@@ -298,15 +357,27 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
   <form method="post" novalidate id="headerForm">
     {% csrf_token %}
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-danger mb-3">{{ form.non_field_errors }}</div>
+    {# ── Unified validation error banner ─────────────────────────── #}
+    {% if form.errors or row_structure_errors %}
+    <div class="hf-error-banner" id="hf-error-banner">
+      <div class="hf-error-banner-title">Please correct the following before continuing:</div>
+      <ul>
+        {% if form.ref_name.errors %}<li><strong>Reference Identity</strong> — Proposed Reference Name: {{ form.ref_name.errors.0 }}</li>{% endif %}
+        {% if form.description.errors %}<li><strong>Business Context</strong> — Description: {{ form.description.errors.0 }}</li>{% endif %}
+        {% if form.data_classification.errors %}<li><strong>Governance Controls</strong> — Data Classification: {{ form.data_classification.errors.0 }}</li>{% endif %}
+        {% if form.collaboration_mode.errors %}<li><strong>Governance Controls</strong> — Workflow Type: {{ form.collaboration_mode.errors.0 }}</li>{% endif %}
+        {% if form.approver_group_mapping.errors %}<li><strong>Governance Controls</strong> — Approver Group: {{ form.approver_group_mapping.errors.0 }}</li>{% endif %}
+        {% if form.non_field_errors %}{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}{% endif %}
+        {% for err in row_structure_errors %}<li><strong>Row Structure</strong> — {{ err }}</li>{% endfor %}
+      </ul>
+    </div>
     {% endif %}
 
     {# ====== Sticky top bar ====== #}
     <div class="hf-topbar">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <h4>{% if mode == "edit" %}Edit Reference{% else %}Create New Reference{% endif %}</h4>
+          <h4>{% if mode == "edit" %}Edit Reference{% else %}Create Reference Definition{% endif %}</h4>
           <div class="hf-subtitle">
             {% if mode == "edit" %}
               Update governance and structure for this reference dataset.
@@ -315,17 +386,11 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
             {% endif %}
           </div>
         </div>
-        <div class="d-flex gap-2 align-items-center flex-shrink-0">
-          <a class="hf-btn-cancel"
-             href="{% if header %}{% url 'mdu:header_detail' header.pk %}{% else %}{% url 'mdu:catalog' %}{% endif %}">
-            Cancel
-          </a>
-          <button class="hf-btn-submit" type="submit">
-            {% if mode == "edit" %}Save Changes{% else %}Create Reference{% endif %}
-          </button>
-        </div>
       </div>
     </div>
+
+    {# Hidden field drives which action the form takes #}
+    <input type="hidden" name="action" id="hfAction" value="submit">
 
 
     {# ============================================================ #}
@@ -340,12 +405,12 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
 
         {# Reference Name #}
         <div class="hf-field">
-          <label class="hf-label">Reference Name <span class="hf-required">*</span></label>
-          <input type="text" name="ref_name" class="hf-input"
+          <label class="hf-label">Proposed Reference Name <span class="hf-required">*</span></label>
+          <input type="text" name="ref_name" class="hf-input{% if form.ref_name.errors %} hf-input-error{% endif %}"
                  value="{{ form.ref_name.value|default:'' }}"
-                 placeholder="Unique logical name of the reference dataset."
+                 placeholder="Enter a unique name for this reference."
                  maxlength="200" required>
-          <div class="hf-help">Unique logical name of the reference dataset.</div>
+          <div class="hf-help">This name will be checked for uniqueness when the reference definition is saved or submitted.</div>
           {% if form.ref_name.errors %}<div class="hf-error">{{ form.ref_name.errors.0 }}</div>{% endif %}
         </div>
 
@@ -436,7 +501,7 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
         {# Approver Group #}
         <div class="hf-field">
           <label class="hf-label">Approver Group <span class="hf-required">*</span></label>
-          <select name="approver_group_mapping" class="hf-select">
+          <select name="approver_group_mapping" class="hf-select{% if form.approver_group_mapping.errors %} hf-input-error{% endif %}">
             <option value="" {% if not form.approver_group_mapping.value %}selected{% endif %}>Select Approver Group</option>
             {% if form.approver_group_mapping.value %}
               <option value="{{ form.approver_group_mapping.value }}" selected>{{ form.approver_group_mapping.value }}</option>
@@ -548,7 +613,7 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
         {# Description #}
         <div class="hf-field">
           <label class="hf-label">Description <span class="hf-required">*</span></label>
-          <textarea name="description" class="hf-input"
+          <textarea name="description" class="hf-input{% if form.description.errors %} hf-input-error{% endif %}"
                     placeholder="Provide a clear business purpose and intended usage of this reference."
                     maxlength="400">{{ form.description.value|default:'' }}</textarea>
           <div class="hf-help">Provide a clear business purpose and intended usage of this reference.</div>
@@ -574,7 +639,163 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
     </details>
 
 
+    {# ============================================================ #}
+    {# SECTION 4: Row Structure                                      #}
+    {# ============================================================ #}
+    <details class="hf-section" open>
+      <summary>
+        <span class="hf-section-title">Row Structure</span>
+        <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+      </summary>
+      <div class="hf-section-body">
+
+        <p style="font-size:.84rem; color:#64748b; margin-bottom:1rem;">
+          Define the business fields for this reference and select which fields uniquely identify a row.
+        </p>
+
+        {# Server-side validation errors #}
+        {% if row_structure_errors %}
+          {% for err in row_structure_errors %}
+            <div class="hf-error" style="margin-bottom:.5rem;">{{ err }}</div>
+          {% endfor %}
+        {% endif %}
+
+        {# Field table #}
+        <div style="border:1px solid #dde1e7; border-radius:6px; overflow:hidden; margin-bottom:1rem;">
+          <table style="width:100%; border-collapse:collapse; font-size:.855rem;" id="rs-table">
+            <thead>
+              <tr style="background:#f0f2f5; border-bottom:1px solid #dde1e7;">
+                <th style="padding:.55rem .85rem; font-size:.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; text-align:left; white-space:nowrap; width:100px;">Placeholder</th>
+                <th style="padding:.55rem .85rem; font-size:.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; text-align:left; white-space:nowrap;">Field Name</th>
+                <th style="padding:.55rem .85rem; font-size:.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; text-align:center; white-space:nowrap; width:90px;">Key Field</th>
+                <th style="padding:.55rem .85rem; font-size:.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; text-align:left;">Description</th>
+                <th style="padding:.55rem .85rem; width:36px;"></th>
+              </tr>
+            </thead>
+            <tbody id="rs-body">
+              {% if existing_columns %}
+                {% for col in existing_columns %}
+                  <tr class="rs-row" data-index="{{ forloop.counter0 }}">
+                    <td style="padding:.45rem .85rem; border-bottom:1px solid #f1f5f9;">
+                      <span class="rs-placeholder"
+                            style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.22rem .5rem; display:inline-block; user-select:none;">{{ col.placeholder_label }}</span>
+                    </td>
+                    <td style="padding:.45rem .85rem; border-bottom:1px solid #f1f5f9;">
+                      <input type="text" name="rs_field_name" value="{{ col.field_name }}"
+                             placeholder="e.g. Client Type"
+                             style="width:100%; border:1px solid #e2e8f0; border-radius:4px; padding:.35rem .6rem; font-size:.855rem; background:#f8fafc; outline:none;"
+                             onfocus="this.style.borderColor='#93c5fd'; this.style.background='#fff';"
+                             onblur="this.style.borderColor='#e2e8f0'; this.style.background='#f8fafc'; rsUpdateKeyPreview();">
+                    </td>
+                    <td style="padding:.45rem .85rem; border-bottom:1px solid #f1f5f9; text-align:center;">
+                      <input type="checkbox" name="rs_is_key" value="{{ forloop.counter0 }}"
+                             {% if col.is_key %}checked{% endif %}
+                             class="rs-key-cb"
+                             style="width:16px; height:16px; accent-color:#1e293b; cursor:pointer;"
+                             onchange="rsUpdateKeyPreview();">
+                    </td>
+                    <td style="padding:.45rem .85rem; border-bottom:1px solid #f1f5f9;">
+                      <input type="text" name="rs_description" value="{{ col.description }}"
+                             placeholder="Optional description"
+                             style="width:100%; border:1px solid #e2e8f0; border-radius:4px; padding:.35rem .6rem; font-size:.855rem; background:#f8fafc; outline:none;"
+                             onfocus="this.style.borderColor='#93c5fd'; this.style.background='#fff';"
+                             onblur="this.style.borderColor='#e2e8f0'; this.style.background='#f8fafc';">
+                    </td>
+                    <td style="padding:.45rem .5rem; border-bottom:1px solid #f1f5f9; text-align:center;">
+                      <button type="button" onclick="rsRemoveRow(this)"
+                              style="background:none; border:none; cursor:pointer; color:#cbd5e1; font-size:1.1rem; line-height:1; padding:2px 4px; border-radius:3px;"
+                              onmouseover="this.style.color='#dc2626'; this.style.background='#fff5f5';"
+                              onmouseout="this.style.color='#cbd5e1'; this.style.background='none';"
+                              title="Remove field">&times;</button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        {# Add Field button #}
+        <div style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
+          <button type="button" id="rs-add-btn" onclick="rsAddRow()"
+                  style="display:inline-flex; align-items:center; gap:.35rem; padding:.38rem .9rem; font-size:.84rem; font-weight:500; border:1px solid #dde1e7; border-radius:5px; background:#fff; color:#374151; cursor:pointer; transition:all .12s;"
+                  onmouseover="this.style.background='#f0f2f5'; this.style.borderColor='#94a3b8';"
+                  onmouseout="this.style.background='#fff'; this.style.borderColor='#dde1e7';">
+            + Add Field
+          </button>
+          <span id="rs-max-msg"
+                style="display:none; font-size:.8rem; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:4px; padding:.22rem .65rem;">
+            Maximum of 65 fields reached.
+          </span>
+        </div>
+
+        {# Composite key preview #}
+        <div id="rs-key-preview"
+             style="margin-top:1rem; padding:.55rem .9rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; font-size:.84rem; color:#475569;">
+          <span style="font-weight:600; color:#0f172a;">Composite Key:</span>
+          <span id="rs-key-text" style="margin-left:.4rem; color:#64748b; font-style:italic;">None selected</span>
+        </div>
+
+      </div>
+    </details>
+
+
+    {# ── Sticky footer action bar ───────────────────────────────────── #}
+    <div class="hf-action-bar">
+      <a class="hf-btn-cancel"
+         href="{% if header %}{% url 'mdu:header_detail' header.pk %}{% else %}{% url 'mdu:catalog' %}{% endif %}">
+        Cancel
+      </a>
+      <button class="hf-btn-draft" type="button" onclick="hfSaveDraft()">
+        Save Draft
+      </button>
+      <button class="hf-btn-submit" type="button" onclick="hfOpenAttestation()">
+        {% if mode == "edit" %}Save Changes{% else %}Create Reference Definition{% endif %}
+      </button>
+    </div>
+
   </form>
+</div>
+
+{# ── Attestation modal ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="hfAttestModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:520px;">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1px solid #f1f5f9;">
+        <h5 class="modal-title" style="font-size:.95rem; font-weight:700; color:#0f172a;">Confirm Submission</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="font-size:.875rem; color:#475569; line-height:1.6;">
+        <p style="margin-bottom:1rem;">
+          Please confirm that the reference definition is accurate and ready for approval.
+          Once published, it may be used by reports and processes already in production
+          and may be visible to authorized users across the organization.
+        </p>
+        {% if attestation_error %}
+          <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:5px; padding:.5rem .75rem; font-size:.82rem; color:#b91c1c; margin-bottom:.75rem;">
+            {{ attestation_error }}
+          </div>
+        {% endif %}
+        <label style="display:flex; align-items:flex-start; gap:.6rem; cursor:pointer;">
+          <input type="checkbox" id="hfAttestCheck"
+                 style="margin-top:3px; width:15px; height:15px; accent-color:#1e293b; flex-shrink:0; cursor:pointer;">
+          <span style="font-size:.855rem; color:#1e293b; font-weight:500;">
+            I confirm that this reference definition is accurate to the best of my knowledge
+            and ready for approval.
+          </span>
+        </label>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid #f1f5f9; justify-content:space-between;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Go Back</button>
+        <button type="button" id="hfAttestConfirmBtn"
+                onclick="hfConfirmSubmit()"
+                style="padding:.45rem 1.25rem; font-size:.875rem; font-weight:600; border:none; border-radius:6px; background:#1e293b; color:#fff; cursor:pointer; opacity:.45;"
+                disabled>
+          Confirm &amp; Submit
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -641,5 +862,179 @@ textarea.hf-input { min-height: 90px; resize: vertical; }
   // Initial render for edit mode pre-population
   renderPills();
 })();
+</script>
+
+<script>
+/* ── Row Structure ────────────────────────────────────────────────────────── */
+(function () {
+
+  var RS_MAX = 65;
+
+  function rsLabel(pos) {
+    return 'string_' + String(pos).padStart(2, '0');
+  }
+
+  var cellStyle  = 'padding:.45rem .85rem; border-bottom:1px solid #f1f5f9;';
+  var inputStyle = 'width:100%; border:1px solid #e2e8f0; border-radius:4px; padding:.35rem .6rem; font-size:.855rem; background:#f8fafc; outline:none;';
+  var phStyle    = 'font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.22rem .5rem; display:inline-block; user-select:none;';
+
+  window.rsAddRow = function () {
+    var rows = document.querySelectorAll('#rs-body .rs-row');
+    if (rows.length >= RS_MAX) { rsUpdateCap(); return; }
+
+    var tbody = document.getElementById('rs-body');
+    var pos   = rows.length + 1;
+    var idx   = rows.length;
+    var tr    = document.createElement('tr');
+    tr.className = 'rs-row';
+    tr.dataset.index = idx;
+
+    tr.innerHTML =
+      '<td style="' + cellStyle + '">' +
+        '<span class="rs-placeholder" style="' + phStyle + '">' + rsLabel(pos) + '</span>' +
+      '</td>' +
+      '<td style="' + cellStyle + '">' +
+        '<input type="text" name="rs_field_name" placeholder="e.g. Client Type"' +
+        ' style="' + inputStyle + '"' +
+        ' onfocus="this.style.borderColor=\'#93c5fd\'; this.style.background=\'#fff\';"' +
+        ' onblur="this.style.borderColor=\'#e2e8f0\'; this.style.background=\'#f8fafc\'; rsUpdateKeyPreview();">' +
+      '</td>' +
+      '<td style="' + cellStyle + ' text-align:center;">' +
+        '<input type="checkbox" name="rs_is_key" value="' + idx + '" class="rs-key-cb"' +
+        ' style="width:16px; height:16px; accent-color:#1e293b; cursor:pointer;"' +
+        ' onchange="rsUpdateKeyPreview();">' +
+      '</td>' +
+      '<td style="' + cellStyle + '">' +
+        '<input type="text" name="rs_description" placeholder="Optional description"' +
+        ' style="' + inputStyle + '"' +
+        ' onfocus="this.style.borderColor=\'#93c5fd\'; this.style.background=\'#fff\';"' +
+        ' onblur="this.style.borderColor=\'#e2e8f0\'; this.style.background=\'#f8fafc\';">' +
+      '</td>' +
+      '<td style="' + cellStyle + ' text-align:center; width:36px;">' +
+        '<button type="button" onclick="rsRemoveRow(this)"' +
+        ' style="background:none; border:none; cursor:pointer; color:#cbd5e1; font-size:1.1rem; line-height:1; padding:2px 4px; border-radius:3px;"' +
+        ' onmouseover="this.style.color=\'#dc2626\'; this.style.background=\'#fff5f5\';"' +
+        ' onmouseout="this.style.color=\'#cbd5e1\'; this.style.background=\'none\';"' +
+        ' title="Remove field">&times;</button>' +
+      '</td>';
+
+    tbody.appendChild(tr);
+    tr.querySelector('input[name="rs_field_name"]').focus();
+    rsRenumberValues();
+    rsUpdateKeyPreview();
+    rsUpdateCap();
+  };
+
+  window.rsRemoveRow = function (btn) {
+    var row = btn.closest('tr');
+    if (row) {
+      row.remove();
+      rsRenumberValues();
+      rsUpdateKeyPreview();
+      rsUpdateCap();
+    }
+  };
+
+  function rsRenumberValues () {
+    var rows = document.querySelectorAll('#rs-body .rs-row');
+    rows.forEach(function (tr, i) {
+      tr.dataset.index = i;
+      var ph = tr.querySelector('.rs-placeholder');
+      if (ph) ph.textContent = rsLabel(i + 1);
+      var cb = tr.querySelector('input[name="rs_is_key"]');
+      if (cb) cb.value = i;
+    });
+  }
+
+  function rsUpdateCap () {
+    var count = document.querySelectorAll('#rs-body .rs-row').length;
+    var btn   = document.getElementById('rs-add-btn');
+    var msg   = document.getElementById('rs-max-msg');
+    var atMax = count >= RS_MAX;
+    if (btn) { btn.disabled = atMax; btn.style.opacity = atMax ? '0.4' : '1'; btn.style.cursor = atMax ? 'not-allowed' : 'pointer'; }
+    if (msg) { msg.style.display = atMax ? 'inline-block' : 'none'; }
+  }
+
+  window.rsUpdateKeyPreview = function () {
+    var rows     = document.querySelectorAll('#rs-body .rs-row');
+    var keyNames = [];
+    rows.forEach(function (tr) {
+      var cb   = tr.querySelector('input[name="rs_is_key"]');
+      var name = (tr.querySelector('input[name="rs_field_name"]').value || '').trim();
+      if (cb && cb.checked && name) { keyNames.push(name); }
+    });
+    var span = document.getElementById('rs-key-text');
+    if (keyNames.length) {
+      span.textContent = keyNames.join(' + ');
+      span.style.color = '#0f172a'; span.style.fontStyle = 'normal'; span.style.fontWeight = '500';
+    } else {
+      span.textContent = 'None selected';
+      span.style.color = '#64748b'; span.style.fontStyle = 'italic'; span.style.fontWeight = 'normal';
+    }
+  };
+
+  rsRenumberValues();
+  rsUpdateKeyPreview();
+  rsUpdateCap();
+
+})();
+</script>
+
+<script>
+/* ── Header Form: action wiring ─────────────────────────────────────────── */
+function hfSaveDraft() {
+  var field = document.getElementById('hfAction');
+  if (field) field.value = 'save_draft';
+  document.getElementById('headerForm').submit();
+}
+
+function hfOpenAttestation() {
+  // Client-side: warn if fewer than 2 fields defined
+  var rows = document.querySelectorAll('#rs-body .rs-row');
+  var names = Array.from(rows).map(function(tr) {
+    var inp = tr.querySelector('input[name="rs_field_name"]');
+    return inp ? inp.value.trim() : '';
+  }).filter(Boolean);
+  if (names.length < 2) {
+    alert('At least two fields must be defined in Row Structure before submitting.');
+    return;
+  }
+  // Open the attestation modal
+  var modal = new bootstrap.Modal(document.getElementById('hfAttestModal'));
+  modal.show();
+}
+
+function hfConfirmSubmit() {
+  var cb  = document.getElementById('hfAttestCheck');
+  if (!cb || !cb.checked) return;
+  // Inject the attested flag as a hidden field and set action=submit
+  var form = document.getElementById('headerForm');
+  var att  = document.createElement('input');
+  att.type  = 'hidden';
+  att.name  = 'hf_attested';
+  att.value = '1';
+  form.appendChild(att);
+  var action = document.getElementById('hfAction');
+  if (action) action.value = 'submit';
+  form.submit();
+}
+
+// Enable/disable Confirm & Submit based on checkbox state
+document.addEventListener('DOMContentLoaded', function() {
+  var cb  = document.getElementById('hfAttestCheck');
+  var btn = document.getElementById('hfAttestConfirmBtn');
+  if (cb && btn) {
+    cb.addEventListener('change', function() {
+      btn.disabled = !cb.checked;
+      btn.style.opacity = cb.checked ? '1' : '.45';
+    });
+  }
+
+  // If attestation_error is present, auto-open the modal on page load
+  {% if attestation_error %}
+  var modal = new bootstrap.Modal(document.getElementById('hfAttestModal'));
+  modal.show();
+  {% endif %}
+});
 </script>
 {% endblock %}
