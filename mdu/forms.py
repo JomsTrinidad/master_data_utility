@@ -41,6 +41,14 @@ class HeaderForm(forms.ModelForm):
         label="Certification Required",
     )
 
+    # Business Owner — stored on the DEFINE CR, not on MDUHeader directly
+    business_owner_sid = forms.CharField(
+        required=False,
+        label="Business Owner",
+        max_length=40,
+        widget=forms.TextInput(attrs={"placeholder": "e.g., jdoe123"}),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -70,6 +78,16 @@ class HeaderForm(forms.ModelForm):
 
             # Pre-populate certification_required from model
             self.initial["certification_required"] = self.instance.certification_required
+
+            # Pre-populate business_owner_sid from the latest DEFINE CR for this header
+            latest_define = (
+                self.instance.changes
+                .filter(operation_hint="DEFINE")
+                .order_by("-created_at")
+                .first()
+            )
+            if latest_define:
+                self.initial["business_owner_sid"] = latest_define.business_owner_sid or ""
 
     def clean_owning_domain_lob(self):
         values = self.cleaned_data.get("owning_domain_lob") or []

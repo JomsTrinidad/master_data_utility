@@ -505,16 +505,25 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
 
         </div>{# /.2-col grid #}
 
-        {# Approver Group #}
-        <div class="hf-field">
-          <label class="hf-label">Approver Group <span class="hf-required">*</span></label>
-          <select name="approver_group_mapping" class="hf-select{% if form.approver_group_mapping.errors %} hf-input-error{% endif %}">
-            {% for val, label in form.fields.approver_group_mapping.choices %}
-              <option value="{{ val }}" {% if form.approver_group_mapping.value == val %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <div class="hf-help">Group responsible for final approval.</div>
-          {% if form.approver_group_mapping.errors %}<div class="hf-error">{{ form.approver_group_mapping.errors.0 }}</div>{% endif %}
+        {# Approver Group + Business Owner — 2-column grid #}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
+          <div class="hf-field">
+            <label class="hf-label">Approver Group <span class="hf-required">*</span></label>
+            <select name="approver_group_mapping" class="hf-select{% if form.approver_group_mapping.errors %} hf-input-error{% endif %}">
+              {% for val, label in form.fields.approver_group_mapping.choices %}
+                <option value="{{ val }}" {% if form.approver_group_mapping.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="hf-help">Group responsible for final approval.</div>
+            {% if form.approver_group_mapping.errors %}<div class="hf-error">{{ form.approver_group_mapping.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="hf-field">
+            <label class="hf-label">Business Owner</label>
+            <input type="text" name="business_owner_sid" class="hf-input"
+                   value="{{ form.business_owner_sid.value|default:'' }}"
+                   placeholder="e.g., jdoe123">
+            <div class="hf-help">Username or ID of the business owner for this reference.</div>
+          </div>
         </div>
 
         {# Approval Model + Approval Scope — 2-column grid #}

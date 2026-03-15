@@ -170,13 +170,6 @@
   .pcl-table tbody tr:hover { background: #f8fafc; }
   .pcl-table tbody tr.clickable-row { cursor: pointer; }
 
-  .pcl-id-link {
-    color: #2563eb;
-    font-weight: 500;
-    text-decoration: none;
-  }
-  .pcl-id-link:hover { text-decoration: underline; }
-
   .pcl-cell-meta { color: #475569; }
   .pcl-cell-empty { color: #94a3b8; }
 
@@ -290,6 +283,7 @@
             <tr>
               <th style="width:2%;"></th>
               <th>Display ID</th>
+              <th>Type</th>
               <th>Reference</th>
               <th>Workflow</th>
               <th>Author</th>
@@ -307,19 +301,20 @@
 
               <td>
                 {% if d.pk in drifted_ids %}
-                  <input class="form-check-input" type="checkbox" name="draft_ids" value="{{ d.pk }}" aria-label="Select drifted draft" onclick="event.stopPropagation();">
+                  <input class="form-check-input" type="checkbox" name="draft_ids" value="{{ d.pk }}" aria-label="Select drifted draft" onclick="event.stopPropagation();" style="width:18px;height:18px;cursor:pointer;">
                 {% else %}
                   <span class="pcl-cell-empty">&mdash;</span>
                 {% endif %}
               </td>
 
               <td>
-                <a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" onclick="event.stopPropagation();">{{ d.display_id }}</a>
+                <span class="pcl-cell-meta" style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:.84rem;">{{ d.display_id }}</span>
                 {% if d.created_by and d.created_by != user %}
                   <span class="pcl-badge-sub">Shared &middot; {{ d.created_by.username }}</span>
                 {% endif %}
               </td>
 
+              <td class="pcl-cell-meta">{{ d.cr_type_label }}</td>
               <td class="pcl-cell-meta">{{ d.header.ref_name }}</td>
               <td class="pcl-cell-meta">{{ d.ref_kind_label }}</td>
               <td class="pcl-cell-meta">{{ d.author_label }}</td>
@@ -371,6 +366,7 @@
         <thead>
           <tr>
             <th>Display ID</th>
+            <th>Type</th>
             <th>Reference</th>
             <th>Workflow</th>
             <th>Author</th>
@@ -381,7 +377,8 @@
         <tbody>
           {% for s in submitted %}
           <tr data-href="{% url 'mdu:proposed_change_detail' pk=s.pk %}" role="button" tabindex="0" class="clickable-row">
-            <td><a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=s.pk %}" onclick="event.stopPropagation();">{{ s.display_id }}</a></td>
+            <td><span class="pcl-cell-meta" style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:.84rem;">{{ s.display_id }}</span></td>
+            <td class="pcl-cell-meta">{{ s.cr_type_label }}</td>
             <td class="pcl-cell-meta">{{ s.header.ref_name }}</td>
             <td class="pcl-cell-meta">{{ s.ref_kind_label }}</td>
             <td class="pcl-cell-meta">{{ s.author_label }}</td>
@@ -417,6 +414,7 @@
         <thead>
           <tr>
             <th>Display ID</th>
+            <th>Type</th>
             <th>Reference</th>
             <th>Workflow</th>
             <th>Author</th>
@@ -428,7 +426,8 @@
         <tbody>
           {% for d in decisioned %}
           <tr data-href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" role="button" tabindex="0" class="clickable-row">
-            <td><a class="pcl-id-link" href="{% url 'mdu:proposed_change_detail' pk=d.pk %}" onclick="event.stopPropagation();">{{ d.display_id }}</a></td>
+            <td><span class="pcl-cell-meta" style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:.84rem;">{{ d.display_id }}</span></td>
+            <td class="pcl-cell-meta">{{ d.cr_type_label }}</td>
             <td class="pcl-cell-meta">{{ d.header.ref_name }}</td>
             <td class="pcl-cell-meta">{{ d.ref_kind_label }}</td>
             <td class="pcl-cell-meta">{{ d.author_label }}</td>
