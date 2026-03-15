@@ -465,12 +465,12 @@
 
       <div>
         <div class="hd-attr-label">Business Owner</div>
-        <div class="hd-attr-value">{% if latest and latest.business_owner_sid %}{{ latest.business_owner_sid }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
+        <div class="hd-attr-value">{% if header.detail_business_owner %}{{ header.detail_business_owner }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
       </div>
 
       <div>
         <div class="hd-attr-label">Approver Group</div>
-        <div class="hd-attr-value">{% if latest and latest.approver_ad_group %}{{ latest.approver_ad_group }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
+        <div class="hd-attr-value">{% if header.detail_approver_group %}{{ header.detail_approver_group }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
       </div>
 
     </div>

@@ -77,6 +77,11 @@ class MDUHeader(models.Model):
     approver_group_mapping = models.TextField(blank=True, default="")
 
     # Lifecycle semantics placeholders (configured here; enforced later in UI rules/state)
+    certification_required = models.BooleanField(
+        default=False,
+        help_text="Whether periodic certification is required for this reference.",
+    )
+
     effective_dating_rules = models.CharField(max_length=200, blank=True, default="")
     history_retention_expectations = models.CharField(max_length=200, blank=True, default="")
 

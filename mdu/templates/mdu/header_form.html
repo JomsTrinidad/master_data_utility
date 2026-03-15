@@ -341,6 +341,13 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
   transition: all .15s;
 }
 .hf-btn-draft:hover { background: #f1f5f9; border-color: #94a3b8; color: #111827; }
+.hf-btn-draft:disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+
+/* Versioned date-field info band (shown only when mode=versioning) */
+#rs-versioned-band { display: none; }
+.hf-mode-versioned #rs-versioned-band { display: table-row-group; }
+
+
 
 /* --- Responsive --- */
 @media (max-width: 640px) {
@@ -437,10 +444,10 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
             <label class="hf-label">Data Change Mode <span class="hf-required">*</span></label>
             <div class="hf-toggle-group">
               <input type="radio" name="mode" id="mode_snapshot" value="snapshot"
-                     {% if form.mode.value == "snapshot" %}checked{% endif %}>
+                     {% if form.mode.value == "snapshot" or not form.mode.value %}checked{% endif %}>
               <label for="mode_snapshot">Snapshot</label>
               <input type="radio" name="mode" id="mode_versioning" value="versioning"
-                     {% if form.mode.value == "versioning" or not form.mode.value %}checked{% endif %}>
+                     {% if form.mode.value == "versioning" %}checked{% endif %}>
               <label for="mode_versioning">Versioned</label>
             </div>
             <div class="hf-help">SNAPSHOT: Dataset replaced &middot; VERSIONED: Row lifecycle tracking</div>
@@ -502,10 +509,9 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
         <div class="hf-field">
           <label class="hf-label">Approver Group <span class="hf-required">*</span></label>
           <select name="approver_group_mapping" class="hf-select{% if form.approver_group_mapping.errors %} hf-input-error{% endif %}">
-            <option value="" {% if not form.approver_group_mapping.value %}selected{% endif %}>Select Approver Group</option>
-            {% if form.approver_group_mapping.value %}
-              <option value="{{ form.approver_group_mapping.value }}" selected>{{ form.approver_group_mapping.value }}</option>
-            {% endif %}
+            {% for val, label in form.fields.approver_group_mapping.choices %}
+              <option value="{{ val }}" {% if form.approver_group_mapping.value == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
           </select>
           <div class="hf-help">Group responsible for final approval.</div>
           {% if form.approver_group_mapping.errors %}<div class="hf-error">{{ form.approver_group_mapping.errors.0 }}</div>{% endif %}
@@ -534,16 +540,14 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
 
         </div>{# /.2-col grid #}
 
-        {# Status: visible on edit only #}
+        {# Status: read-only display on edit; hidden on create #}
         {% if mode == "edit" %}
         <div class="hf-field">
           <label class="hf-label">Status</label>
-          <select name="status" class="hf-select">
-            {% for val, label in form.fields.status.choices %}
-              <option value="{{ val }}" {% if form.status.value == val %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          {% if form.status.errors %}<div class="hf-error">{{ form.status.errors.0 }}</div>{% endif %}
+          <div class="hf-input" style="background:#f0f2f5; color:#6c757d; cursor:default; user-select:none;">
+            {% for val, label in form.fields.status.choices %}{% if form.status.value == val %}{{ label }}{% endif %}{% endfor %}
+          </div>
+          <input type="hidden" name="status" value="{{ form.status.value }}">
         </div>
         {% else %}
           <input type="hidden" name="status" value="IN_REVIEW">
@@ -568,8 +572,11 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
 
           <div class="hf-field">
             <label class="hf-label">Category</label>
-            <input type="text" name="category" class="hf-input"
-                   value="{{ form.category.value|default:'' }}" placeholder="e.g., Payments, Segmentation">
+            <select name="category" class="hf-select">
+              {% for val, lbl in form.fields.category.choices %}
+                <option value="{{ val }}" {% if form.category.value == val %}selected{% endif %}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
           </div>
 
           <div class="hf-field">
@@ -628,8 +635,8 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
               <div class="hf-help" style="margin-top:0">If enabled, this reference will enter periodic certification workflow.</div>
             </div>
             <label class="hf-switch-track">
-              <input type="checkbox" id="certRequired" name="cert_required" value="1"
-                     {% if form.instance.pk and form.instance.effective_dating_rules == "cert_required" %}checked{% endif %}>
+              <input type="checkbox" id="certRequired" name="certification_required" value="1"
+                     {% if form.instance.certification_required %}checked{% endif %}>
               <span class="hf-switch-slider"></span>
             </label>
           </div>
@@ -642,7 +649,7 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
     {# ============================================================ #}
     {# SECTION 4: Row Structure                                      #}
     {# ============================================================ #}
-    <details class="hf-section" open>
+    <details class="hf-section" open id="hf-rs-section">
       <summary>
         <span class="hf-section-title">Row Structure</span>
         <svg class="hf-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
@@ -672,6 +679,35 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
                 <th style="padding:.55rem .85rem; width:36px;"></th>
               </tr>
             </thead>
+            {# Static info band for start_dt / end_dt — shown only in Versioned mode via CSS #}
+            <tbody id="rs-versioned-band">
+              <tr style="background:#f5f3ff;">
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #e0e7ff;">
+                  <span style="font-family:monospace; font-size:.8rem; color:#6366f1; background:#ede9fe; border:1px solid #c4b5fd; border-radius:4px; padding:.18rem .45rem; display:inline-block;">start_dt</span>
+                </td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #e0e7ff; font-weight:600; color:#3730a3;">Start Date</td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #e0e7ff; text-align:center;">
+                  <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; background:#6366f1; border-radius:3px;">
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 6 4.5 9.5 10.5 2.5"/></svg>
+                  </span>
+                </td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #e0e7ff; color:#6366f1; font-size:.82rem;">Effective start date (versioned references).</td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #e0e7ff;"></td>
+              </tr>
+              <tr style="background:#f5f3ff;">
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #f1f5f9;">
+                  <span style="font-family:monospace; font-size:.8rem; color:#6366f1; background:#ede9fe; border:1px solid #c4b5fd; border-radius:4px; padding:.18rem .45rem; display:inline-block;">end_dt</span>
+                </td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #f1f5f9; font-weight:600; color:#3730a3;">End Date</td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #f1f5f9; text-align:center;">
+                  <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; background:#6366f1; border-radius:3px;">
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 6 4.5 9.5 10.5 2.5"/></svg>
+                  </span>
+                </td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #f1f5f9; color:#6366f1; font-size:.82rem;">Effective end date (versioned references).</td>
+                <td style="padding:.4rem .85rem; border-bottom:1px solid #f1f5f9;"></td>
+              </tr>
+            </tbody>
             <tbody id="rs-body">
               {% if existing_columns %}
                 {% for col in existing_columns %}
@@ -746,11 +782,11 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
          href="{% if header %}{% url 'mdu:header_detail' header.pk %}{% else %}{% url 'mdu:catalog' %}{% endif %}">
         Cancel
       </a>
-      <button class="hf-btn-draft" type="button" onclick="hfSaveDraft()">
+      <button class="hf-btn-draft" type="button" id="hfDraftBtn" onclick="hfSaveDraft()">
         Save Draft
       </button>
-      <button class="hf-btn-submit" type="button" onclick="hfOpenAttestation()">
-        {% if mode == "edit" %}Save Changes{% else %}Create Reference Definition{% endif %}
+      <button class="hf-btn-submit" type="button" id="hfSubmitBtn" onclick="hfOpenAttestation()">
+        Submit for Approval
       </button>
     </div>
 
@@ -870,7 +906,7 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
 
   var RS_MAX = 65;
 
-  function rsLabel(pos) {
+  window.rsLabel = function rsLabel(pos) {
     return 'string_' + String(pos).padStart(2, '0');
   }
 
@@ -935,18 +971,20 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
     }
   };
 
-  function rsRenumberValues () {
+  window.rsRenumberValues = function rsRenumberValues () {
+    /* Only user-defined rows live in #rs-body. The versioned band is a
+       separate <tbody> with no form inputs, so sequential numbering is simple. */
     var rows = document.querySelectorAll('#rs-body .rs-row');
     rows.forEach(function (tr, i) {
       tr.dataset.index = i;
       var ph = tr.querySelector('.rs-placeholder');
-      if (ph) ph.textContent = rsLabel(i + 1);
       var cb = tr.querySelector('input[name="rs_is_key"]');
+      if (ph) ph.textContent = rsLabel(i + 1);
       if (cb) cb.value = i;
     });
   }
 
-  function rsUpdateCap () {
+  window.rsUpdateCap = function rsUpdateCap () {
     var count = document.querySelectorAll('#rs-body .rs-row').length;
     var btn   = document.getElementById('rs-add-btn');
     var msg   = document.getElementById('rs-max-msg');
@@ -956,11 +994,18 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
   }
 
   window.rsUpdateKeyPreview = function () {
-    var rows     = document.querySelectorAll('#rs-body .rs-row');
+    /* Build key name list: start with start_dt/end_dt if Versioned mode is active,
+       then append any user-row key fields. */
     var keyNames = [];
-    rows.forEach(function (tr) {
-      var cb   = tr.querySelector('input[name="rs_is_key"]');
-      var name = (tr.querySelector('input[name="rs_field_name"]').value || '').trim();
+    var modeEl = document.querySelector('input[name="mode"]:checked');
+    var isVersioned = modeEl && modeEl.value === 'versioning';
+    if (isVersioned) {
+      keyNames.push('Start Date', 'End Date');
+    }
+    document.querySelectorAll('#rs-body .rs-row').forEach(function (tr) {
+      var cb  = tr.querySelector('input[name="rs_is_key"]');
+      var inp = tr.querySelector('input[name="rs_field_name"]');
+      var name = inp ? (inp.value || '').trim() : '';
       if (cb && cb.checked && name) { keyNames.push(name); }
     });
     var span = document.getElementById('rs-key-text');
@@ -982,24 +1027,155 @@ select.hf-input-error { border-color: #dc2626 !important; background: #fff5f5 !i
 
 <script>
 /* ── Header Form: action wiring ─────────────────────────────────────────── */
-function hfSaveDraft() {
-  var field = document.getElementById('hfAction');
-  if (field) field.value = 'save_draft';
-  document.getElementById('headerForm').submit();
+
+/* ---------- Change detection (items 3) ----------------------------------- */
+var _hfSavedFingerprint = null;
+
+function _hfFingerprint() {
+  var form = document.getElementById('headerForm');
+  if (!form) return '';
+  var els = form.querySelectorAll('input, select, textarea');
+  var parts = [];
+  els.forEach(function(el) {
+    if (el.name === 'action' || el.name === 'hf_attested') return;
+    /* start_dt / end_dt are display-only — no inputs in the form */
+    if (el.type === 'radio' || el.type === 'checkbox') {
+      parts.push(el.name + ':' + (el.checked ? '1' : '0'));
+    } else {
+      parts.push(el.name + ':' + el.value);
+    }
+  });
+  return parts.join('|');
 }
 
-function hfOpenAttestation() {
-  // Client-side: warn if fewer than 2 fields defined
-  var rows = document.querySelectorAll('#rs-body .rs-row');
-  var names = Array.from(rows).map(function(tr) {
+function hfMarkSaved() {
+  _hfSavedFingerprint = _hfFingerprint();
+  var btn = document.getElementById('hfDraftBtn');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.45';
+  btn.style.cursor  = 'not-allowed';
+  btn.title = 'No unsaved changes';
+}
+
+function hfOnChange() {
+  if (_hfSavedFingerprint === null) return;  // not yet saved this session
+  var btn = document.getElementById('hfDraftBtn');
+  if (!btn) return;
+  var changed = (_hfFingerprint() !== _hfSavedFingerprint);
+  btn.disabled     = !changed;
+  btn.style.opacity = changed ? '1' : '0.45';
+  btn.style.cursor  = changed ? 'pointer' : 'not-allowed';
+  btn.title = changed ? '' : 'No unsaved changes';
+}
+
+/* ---------- Banner error helper (items 5+6) ------------------------------- */
+function hfShowBannerError(messages) {
+  var banner = document.getElementById('hf-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'hf-error-banner';
+    banner.className = 'hf-error-banner';
+    var form = document.getElementById('headerForm');
+    form.insertBefore(banner, form.firstChild);
+  }
+  banner.style.display = '';
+  var html = '<div class="hf-error-banner-title">Please correct the following before continuing:</div><ul>';
+  messages.forEach(function(m) { html += '<li>' + m + '</li>'; });
+  html += '</ul>';
+  banner.innerHTML = html;
+  banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ---------- Row structure validation ─────────────────────────────────────── */
+function _hfIsVersioned() {
+  var modeEl = document.querySelector('input[name="mode"]:checked');
+  return modeEl && modeEl.value === 'versioning';
+}
+
+/* hfValidateAll — checks every mandatory field and row structure in one pass.
+   Returns the full error list so the banner shows everything at once.
+   Also applies / removes the hf-input-error highlight on each field. */
+function hfValidateAll() {
+  var errors = [];
+
+  function mark(el, bad) {
+    if (!el) return;
+    if (bad) { el.classList.add('hf-input-error'); }
+    else     { el.classList.remove('hf-input-error'); }
+  }
+
+  /* Proposed Reference Name */
+  var refEl = document.querySelector('input[name="ref_name"]');
+  var refOk = refEl && refEl.value.trim().length > 0;
+  mark(refEl, !refOk);
+  if (!refOk) errors.push('<strong>Reference Identity</strong> — Proposed Reference Name is required.');
+
+  /* Description */
+  var descEl = document.querySelector('textarea[name="description"]');
+  var descOk = descEl && descEl.value.trim().length > 0;
+  mark(descEl, !descOk);
+  if (!descOk) errors.push('<strong>Business Context</strong> — Description is required.');
+
+  /* Approver Group */
+  var agEl = document.querySelector('select[name="approver_group_mapping"]');
+  var agOk = agEl && agEl.value.trim().length > 0;
+  mark(agEl, !agOk);
+  if (!agOk) errors.push('<strong>Governance Controls</strong> — Approver Group is required.');
+
+  /* Row Structure — at least two user-defined fields */
+  var userRows = Array.from(document.querySelectorAll('#rs-body .rs-row'));
+  var names = userRows.map(function(tr) {
     var inp = tr.querySelector('input[name="rs_field_name"]');
     return inp ? inp.value.trim() : '';
   }).filter(Boolean);
   if (names.length < 2) {
-    alert('At least two fields must be defined in Row Structure before submitting.');
+    errors.push('<strong>Row Structure</strong> — At least two fields must be defined.');
+  }
+
+  /* Row Structure — key field requirement */
+  var userKeyCount = userRows.filter(function(tr) {
+    var cb = tr.querySelector('input[name="rs_is_key"]');
+    var nm = tr.querySelector('input[name="rs_field_name"]');
+    return cb && cb.checked && nm && nm.value.trim();
+  }).length;
+  if (_hfIsVersioned()) {
+    if (userKeyCount < 1) {
+      errors.push(
+        '<strong>Row Structure</strong> — Versioned mode requires Start Date and End Date ' +
+        'plus at least one additional key field. Please check a key field on one of your columns.'
+      );
+    }
+  } else {
+    if (userKeyCount < 1) {
+      errors.push('<strong>Row Structure</strong> — At least one key field must be selected.');
+    }
+  }
+
+  return errors;
+}
+
+/* ---------- Save Draft ─────────────────────────────────────────────────── */
+function hfSaveDraft() {
+  var errs = hfValidateAll();
+  if (errs.length) {
+    hfShowBannerError(errs);
     return;
   }
-  // Open the attestation modal
+  var field = document.getElementById('hfAction');
+  if (field) field.value = 'save_draft';
+  var btn = document.getElementById('hfDraftBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.45'; btn.style.cursor = 'not-allowed'; }
+  document.getElementById('headerForm').submit();
+}
+
+/* ---------- Submit for Approval ─────────────────────────────────────────── */
+function hfOpenAttestation() {
+  var errs = hfValidateAll();
+  if (errs.length) {
+    hfShowBannerError(errs);
+    return;
+  }
   var modal = new bootstrap.Modal(document.getElementById('hfAttestModal'));
   modal.show();
 }
@@ -1007,7 +1183,6 @@ function hfOpenAttestation() {
 function hfConfirmSubmit() {
   var cb  = document.getElementById('hfAttestCheck');
   if (!cb || !cb.checked) return;
-  // Inject the attested flag as a hidden field and set action=submit
   var form = document.getElementById('headerForm');
   var att  = document.createElement('input');
   att.type  = 'hidden';
@@ -1019,8 +1194,29 @@ function hfConfirmSubmit() {
   form.submit();
 }
 
-// Enable/disable Confirm & Submit based on checkbox state
+/* ---------- Versioned / Snapshot display sync ─────────────────────────── */
+/*
+ * start_dt and end_dt are pure backend fields — they never participate in
+ * form POST (no inputs). The table shows a static info band (<tbody id="rs-versioned-band">)
+ * whose visibility is toggled by adding/removing the class "hf-mode-versioned"
+ * on the Row Structure section element. User-defined string_nn rows are
+ * completely unaffected by the mode toggle.
+ */
+function hfSyncVersionedRows(isVersioned) {
+  var section = document.getElementById('hf-rs-section');
+  if (!section) return;
+  if (isVersioned) {
+    section.classList.add('hf-mode-versioned');
+  } else {
+    section.classList.remove('hf-mode-versioned');
+  }
+  rsUpdateKeyPreview();
+}
+
+/* ---------- DOMContentLoaded wiring -------------------------------------- */
 document.addEventListener('DOMContentLoaded', function() {
+
+  /* Attestation checkbox enable/disable */
   var cb  = document.getElementById('hfAttestCheck');
   var btn = document.getElementById('hfAttestConfirmBtn');
   if (cb && btn) {
@@ -1030,11 +1226,36 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // If attestation_error is present, auto-open the modal on page load
+  /* Auto-open attestation modal if server returned attestation_error */
   {% if attestation_error %}
   var modal = new bootstrap.Modal(document.getElementById('hfAttestModal'));
   modal.show();
   {% endif %}
+
+  /* Item 7: wire mode radio buttons */
+  document.querySelectorAll('input[name="mode"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      hfSyncVersionedRows(this.value === 'versioning');
+      hfOnChange();
+    });
+  });
+
+  /* Initial sync on page load */
+  var modeEl = document.querySelector('input[name="mode"]:checked');
+  hfSyncVersionedRows(modeEl && modeEl.value === 'versioning');
+
+  /* Change-detection: take the baseline fingerprint AFTER hfSyncVersionedRows
+     has finished mutating the DOM so the saved state is stable. */
+  {% if define_draft_cr %}
+  hfMarkSaved();
+  {% endif %}
+
+  /* Listen for any input change to re-enable Save Draft */
+  var form = document.getElementById('headerForm');
+  if (form) {
+    form.addEventListener('input', hfOnChange);
+    form.addEventListener('change', hfOnChange);
+  }
 });
 </script>
 {% endblock %}

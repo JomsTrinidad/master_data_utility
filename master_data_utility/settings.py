@@ -169,3 +169,28 @@ BUSINESS_FUNCTION_CHOICES = [
     ("compliance", "Compliance"),
     ("risk", "Risk"),
 ]
+
+# Reference category choices for HeaderForm
+REFERENCE_CATEGORY_CHOICES = [
+    ("", "— Select Category —"),
+    ("Country", "Country"),
+    ("Currency", "Currency"),
+    ("Product", "Product"),
+    ("Segmentation", "Segmentation"),
+    ("Risk Class", "Risk Class"),
+    ("Regulatory", "Regulatory"),
+    ("Operational", "Operational"),
+    ("Client", "Client"),
+    ("Channel", "Channel"),
+    ("Other", "Other"),
+]
+
+# Approver Group choices for HeaderForm
+APPROVER_GROUP_CHOICES = [
+    ("AD_GRP_PAYMENTS_APPROVERS", "Payments Approvers"),
+    ("AD_GRP_COMPLIANCE_APPROVERS", "Compliance Approvers"),
+    ("AD_GRP_RISK_APPROVERS", "Risk Approvers"),
+    ("AD_GRP_TREASURY_APPROVERS", "Treasury Approvers"),
+    ("AD_GRP_ONBOARDING_APPROVERS", "Onboarding Approvers"),
+    ("AD_GRP_DATA_GOVERNANCE", "Data Governance"),
+]

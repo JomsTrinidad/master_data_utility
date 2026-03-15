@@ -12,19 +12,78 @@ class HeaderForm(forms.ModelForm):
         widget=forms.CheckboxSelectMultiple,
     )
 
+    # Approver Group — real ChoiceField populated from settings
+    approver_group_mapping = forms.ChoiceField(
+        choices=[],          # populated in __init__
+        required=True,
+        label="Approver Group",
+    )
+
+    # Category — dropdown from settings
+    category = forms.ChoiceField(
+        choices=[],          # populated in __init__
+        required=False,
+        label="Category",
+    )
+
+    # Description — enforce required server-side (model field is blank=True for legacy reasons)
+    description = forms.CharField(
+        required=True,
+        label="Description",
+        max_length=400,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        error_messages={"required": "Description is required."},
+    )
+
+    # Certification Required — stored on header.certification_required
+    certification_required = forms.BooleanField(
+        required=False,
+        label="Certification Required",
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        choices = getattr(settings, "BUSINESS_FUNCTION_CHOICES", [])
-        self.fields["owning_domain_lob"].choices = choices
+
+        # Business Function choices
+        bf_choices = getattr(settings, "BUSINESS_FUNCTION_CHOICES", [])
+        self.fields["owning_domain_lob"].choices = bf_choices
+
+        # Approver Group choices from settings; blank sentinel first
+        ag_choices = [("", "Select Approver Group")] + list(
+            getattr(settings, "APPROVER_GROUP_CHOICES", [])
+        )
+        self.fields["approver_group_mapping"].choices = ag_choices
+
+        # Category choices from settings
+        self.fields["category"].choices = getattr(
+            settings, "REFERENCE_CATEGORY_CHOICES", [("", "— Select Category —")]
+        )
+
+        # Default Data Change Mode to 'snapshot' for new (unsaved) instances
+        if not (self.instance and self.instance.pk):
+            self.initial.setdefault('mode', 'snapshot')
 
         # Pre-populate from comma-separated string stored in the model
         if self.instance and self.instance.pk:
             raw = self.instance.owning_domain_lob or ""
             self.initial["owning_domain_lob"] = [v.strip() for v in raw.split(",") if v.strip()]
 
+            # Pre-populate certification_required from model
+            self.initial["certification_required"] = self.instance.certification_required
+
     def clean_owning_domain_lob(self):
         values = self.cleaned_data.get("owning_domain_lob") or []
         return ",".join(values)
+
+    def clean_approver_group_mapping(self):
+        val = (self.cleaned_data.get("approver_group_mapping") or "").strip()
+        if not val:
+            raise forms.ValidationError("Approver Group is required.")
+        return val
+
+    def clean_category(self):
+        # Allow blank — category is optional
+        return self.cleaned_data.get("category") or ""
 
     class Meta:
         model = MDUHeader
@@ -47,10 +106,12 @@ class HeaderForm(forms.ModelForm):
             "approval_model",
             "approval_scope",
             "approver_group_mapping",
+
+            # Certification
+            "certification_required",
         ]
         widgets = {
             "tags": forms.TextInput(attrs={"placeholder": "Comma-separated (e.g., Country, Segmentation)"}),
-            "approver_group_mapping": forms.Textarea(attrs={"rows": 3}),
         }
 
 

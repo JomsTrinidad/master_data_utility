@@ -433,9 +433,57 @@
 </details>
 {% endwith %}
 
-<script>
-(function () {
-  var table    = document.getElementById("pcdMetaTable");
+<!-- ====== Row Structure ====== -->
+{% if row_structure_cols %}
+<details class="pcd-section" open>
+  <summary>
+    <span class="pcd-section-title">Row Structure</span>
+    <svg class="pcd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+  </summary>
+  <div class="pcd-section-body">
+    <table class="pcd-table" style="font-size:.855rem;">
+      <thead>
+        <tr>
+          <th style="width:110px;">Placeholder</th>
+          <th>Field Name</th>
+          <th style="width:90px; text-align:center;">Key Field</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for col in row_structure_cols %}
+        <tr>
+          <td>
+            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block;">{{ col.placeholder_label }}</span>
+          </td>
+          <td style="font-weight:{% if col.is_key %}600{% else %}400{% endif %}; color:{% if col.is_key %}#0f172a{% else %}#374151{% endif %};">
+            {{ col.field_name }}
+          </td>
+          <td style="text-align:center;">
+            {% if col.is_key %}
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:#1e293b; border-radius:3px;">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 6 4.5 9.5 10.5 2.5"/></svg>
+              </span>
+            {% else %}
+              <span style="color:#cbd5e1;">—</span>
+            {% endif %}
+          </td>
+          <td style="color:#64748b; font-size:.83rem;">{{ col.description|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="margin-top:.75rem; padding:.5rem .85rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; font-size:.84rem; color:#475569;">
+      <span style="font-weight:600; color:#0f172a;">Composite Key:</span>
+      <span style="margin-left:.4rem;">{{ composite_key_display }}</span>
+    </div>
+
+  </div>
+</details>
+{% endif %}
+
+
   var wrapDiv  = document.getElementById("pcdMetaToggleWrap");
   if (!table) return;
 

@@ -468,7 +468,8 @@ textarea.pcf-field-input { resize: vertical; }
 
   <!-- ══════════════════════════════════
        § 0  REFERENCE METADATA  (stewards / approvers only)
-  ════════════════════════════════════ -->\n  {% if is_steward or is_approver %}
+  ════════════════════════════════════ -->
+  {% if is_steward or is_approver %}
   <details class="pcf-section" id="pcfMetaSection" open>
     <summary>
       <div class="pcf-section-heading">

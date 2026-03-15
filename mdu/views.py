@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Exists, OuterRef, Q
 from django.db import IntegrityError, transaction
 from django.urls import reverse
+from django.utils.safestring import mark_safe
 from datetime import timedelta, date
 from django_tables2 import RequestConfig
 
@@ -176,6 +177,8 @@ def _rs_rows_from_post(post_data):
     Reconstruct existing_columns-shaped dicts from POST data so that
     Row Structure rows survive re-render when other form fields fail validation.
     Returns [] if no rs_field_name entries found.
+    start_dt / end_dt are display-only and have no form inputs, so they never
+    appear in POST — no filtering needed.
     """
     field_names  = post_data.getlist("rs_field_name")
     key_flags    = set(post_data.getlist("rs_is_key"))  # stringified indices
@@ -219,7 +222,7 @@ def _load_row_structure(header):
     return result
 
 
-def _save_row_structure(header, post_data):
+def _save_row_structure(header, post_data, *, is_draft=False):
     """
     Parse field rows from POST, validate, and save MDUColumnDef + composite key.
     Returns list of error strings (empty list = success).
@@ -228,11 +231,15 @@ def _save_row_structure(header, post_data):
       rs_field_name[]   — list of field name strings
       rs_is_key[]       — list of stringified row indices that are key fields
       rs_description[]  — list of description strings (parallel to field names)
+    start_dt / end_dt are display-only (no form inputs) and never appear in POST.
+    When is_draft=True, structural validation (min 2 fields, key field) is skipped
+    so partial definitions can be saved and refined later.
     """
     field_names  = post_data.getlist("rs_field_name")
     key_flags    = post_data.getlist("rs_is_key")    # e.g. ["0", "2"]
     descriptions = post_data.getlist("rs_description")
 
+    # start_dt / end_dt are display-only with no form inputs — nothing to strip.
     n = len(field_names)
     while len(descriptions) < n:
         descriptions.append("")
@@ -241,13 +248,6 @@ def _save_row_structure(header, post_data):
     non_empty = [fn for fn in cleaned if fn]
 
     errors = []
-    if not non_empty:
-        errors.append("Row Structure: at least one field must be defined.")
-        return errors
-
-    if len(non_empty) < 2:
-        errors.append("At least two fields must be defined in Row Structure.")
-        return errors
 
     if n > 65:
         errors.append("Row Structure: maximum of 65 fields allowed.")
@@ -256,11 +256,20 @@ def _save_row_structure(header, post_data):
     seen = set()
     for i, fn in enumerate(cleaned):
         if not fn:
-            errors.append(f"Row Structure: field at position {i+1} has an empty name.")
+            pass  # blank rows silently skipped
         elif fn.lower() in seen:
             errors.append(f"Row Structure: duplicate field name \"{fn}\".")
         else:
             seen.add(fn.lower())
+
+    if not is_draft:
+        # Structural validation only enforced on Submit, not Save Draft
+        if not non_empty:
+            errors.append("Row Structure: at least one field must be defined.")
+            return errors
+        if len(non_empty) < 2:
+            errors.append("At least two fields must be defined in Row Structure.")
+            return errors
 
     key_indices = set()
     for v in key_flags:
@@ -269,7 +278,7 @@ def _save_row_structure(header, post_data):
             if idx < n and cleaned[idx]:
                 key_indices.add(idx)
 
-    if not key_indices:
+    if not is_draft and not key_indices and non_empty:
         errors.append("Row Structure: at least one key field must be selected.")
 
     if errors:
@@ -323,36 +332,71 @@ def header_create(request):
                 )
 
             else:
-                header = form.save()
-                errors = _save_row_structure(header, request.POST)
-                if errors:
-                    header.delete()
-                    row_structure_errors = errors
-                else:
-                    if action == "save_draft":
-                        messages.success(
-                            request,
-                            "Reference definition draft saved. "
-                            "You can continue editing it later from My Proposed Changes.",
-                        )
-                        return redirect("mdu:header_edit", pk=header.pk)
+                with transaction.atomic():
+                    header = form.save(commit=False)
+                    # New headers start as IN_REVIEW until first approval
+                    header.status = MDUHeader.Status.IN_REVIEW
+                    header.save()
+
+                    errors = _save_row_structure(header, request.POST, is_draft=(action == "save_draft"))
+                    if errors:
+                        header.delete()
+                        row_structure_errors = errors
                     else:
-                        messages.success(
-                            request,
-                            "Reference definition submitted for approval. "
-                            "It will now go through the approval process. "
-                            "You can track its status from My Proposed Changes.",
+                        # Create a real ChangeRequest so the work is trackable
+                        cr_status = (
+                            ChangeRequest.Status.DRAFT
+                            if action == "save_draft"
+                            else ChangeRequest.Status.SUBMITTED
                         )
-                        return redirect("mdu:header_detail", pk=header.pk)
+                        snapshot = _extract_header_metadata_snapshot(header)
+                        payload_json = _inject_metadata_into_payload("{}", snapshot)
+
+                        cr = _create_cr_with_unique_display_id(
+                            header=header,
+                            status=cr_status,
+                            operation_hint="DEFINE",
+                            collaboration_mode=header.collaboration_mode,
+                            approver_ad_group=header.approver_group_mapping,
+                            payload_json=payload_json,
+                            created_by=request.user,
+                            requested_by_sid=(
+                                getattr(request.user, "username", "") or ""
+                            ).strip(),
+                        )
+                        if cr_status == ChangeRequest.Status.SUBMITTED:
+                            cr.submitted_at = timezone.now()
+                            cr.save(update_fields=["submitted_at"])
+
+                        if action == "save_draft":
+                            cr_url = reverse("mdu:proposed_change_detail", kwargs={"pk": cr.pk})
+                            messages.success(
+                                request,
+                                mark_safe(
+                                    f'Draft saved as <a href="{cr_url}" class="alert-link">{cr.display_id}</a>. '
+                                    "You can continue editing it later from My Proposed Changes."
+                                ),
+                            )
+                            return redirect("mdu:header_edit", pk=header.pk)
+                        else:
+                            messages.success(
+                                request,
+                                f"Reference definition submitted for approval ({cr.display_id}). "
+                                "You can track its status from My Proposed Changes.",
+                            )
+                            return redirect("mdu:header_detail", pk=header.pk)
     else:
         form = HeaderForm()
 
+    # Expose any existing open DEFINE draft so the template can show a clickable CR link
+    define_draft_cr = None
     return render(request, "mdu/header_form.html", {
         "form": form,
         "mode": "create",
         "row_structure_errors": row_structure_errors,
         "attestation_error": attestation_error,
         "existing_columns": rs_post_rows or _load_row_structure(None),
+        "define_draft_cr": define_draft_cr,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb("New reference", None),
@@ -380,29 +424,91 @@ def header_edit(request, pk):
                     "Please confirm the attestation before submitting."
                 )
             else:
-                form.save()
-                errors = _save_row_structure(header, request.POST)
-                if errors:
-                    row_structure_errors = errors
-                else:
-                    if action == "save_draft":
-                        messages.success(
-                            request,
-                            "Reference definition draft saved. "
-                            "You can continue editing it later from My Proposed Changes.",
-                        )
-                        return redirect("mdu:header_edit", pk=header.pk)
+                with transaction.atomic():
+                    form.save()
+                    errors = _save_row_structure(header, request.POST, is_draft=(action == "save_draft"))
+                    if errors:
+                        row_structure_errors = errors
                     else:
-                        messages.success(
-                            request,
-                            "Reference definition submitted for approval. "
-                            "It will now go through the approval process. "
-                            "You can track its status from My Proposed Changes.",
+                        # Find or reuse the open definition-level draft for this header/user.
+                        # (DEFINE drafts are separate from data-change CRs.)
+                        open_cr = (
+                            header.changes
+                            .filter(
+                                status=ChangeRequest.Status.DRAFT,
+                                operation_hint="DEFINE",
+                                created_by=request.user,
+                            )
+                            .order_by("-created_at")
+                            .first()
                         )
-                        return redirect("mdu:header_detail", pk=header.pk)
+
+                        cr_status = (
+                            ChangeRequest.Status.DRAFT
+                            if action == "save_draft"
+                            else ChangeRequest.Status.SUBMITTED
+                        )
+                        snapshot = _extract_header_metadata_snapshot(header)
+                        payload_json = _inject_metadata_into_payload("{}", snapshot)
+
+                        if open_cr:
+                            open_cr.status = cr_status
+                            open_cr.payload_json = payload_json
+                            open_cr.approver_ad_group = header.approver_group_mapping
+                            open_cr.lock_version = open_cr.lock_version + 1
+                            update_fields = [
+                                "status", "payload_json", "approver_ad_group",
+                                "lock_version", "updated_at",
+                            ]
+                            if cr_status == ChangeRequest.Status.SUBMITTED:
+                                open_cr.submitted_at = timezone.now()
+                                update_fields.append("submitted_at")
+                            open_cr.save(update_fields=update_fields)
+                            cr = open_cr
+                        else:
+                            cr = _create_cr_with_unique_display_id(
+                                header=header,
+                                status=cr_status,
+                                operation_hint="DEFINE",
+                                collaboration_mode=header.collaboration_mode,
+                                approver_ad_group=header.approver_group_mapping,
+                                payload_json=payload_json,
+                                created_by=request.user,
+                                requested_by_sid=(
+                                    getattr(request.user, "username", "") or ""
+                                ).strip(),
+                            )
+                            if cr_status == ChangeRequest.Status.SUBMITTED:
+                                cr.submitted_at = timezone.now()
+                                cr.save(update_fields=["submitted_at"])
+
+                        if action == "save_draft":
+                            cr_url = reverse("mdu:proposed_change_detail", kwargs={"pk": cr.pk})
+                            messages.success(
+                                request,
+                                mark_safe(
+                                    f'Draft saved as <a href="{cr_url}" class="alert-link">{cr.display_id}</a>. '
+                                    "You can continue editing it later from My Proposed Changes."
+                                ),
+                            )
+                            return redirect("mdu:header_edit", pk=header.pk)
+                        else:
+                            messages.success(
+                                request,
+                                f"Reference definition submitted for approval ({cr.display_id}). "
+                                "You can track its status from My Proposed Changes.",
+                            )
+                            return redirect("mdu:header_detail", pk=header.pk)
     else:
         form = HeaderForm(instance=header)
 
+    # Expose any existing open DEFINE draft so the template can show a clickable CR link
+    define_draft_cr = (
+        header.changes
+        .filter(status=ChangeRequest.Status.DRAFT, operation_hint="DEFINE", created_by=request.user)
+        .order_by("-created_at")
+        .first()
+    )
     return render(request, "mdu/header_form.html", {
         "form": form,
         "header": header,
@@ -410,6 +516,7 @@ def header_edit(request, pk):
         "row_structure_errors": row_structure_errors,
         "attestation_error": attestation_error,
         "existing_columns": rs_post_rows or _load_row_structure(header),
+        "define_draft_cr": define_draft_cr,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb(header.ref_name, reverse("mdu:header_detail", kwargs={"pk": header.pk})),
@@ -433,20 +540,41 @@ def header_detail(request, pk):
 
     # Business labels for string_01..65 from the header row
     header_row = next((r for r in all_rows if (r.get("row_type") or "").lower() == "header"), {}) or {}
+
+    # If no approved payload yet, derive visible columns from MDUColumnDef instead
+    if not header_row:
+        rs_cols = _load_row_structure(header)
+        for col_info in rs_cols:
+            tech = col_info.get("placeholder_label") or ""
+            label = col_info.get("field_name") or tech
+            if tech:
+                header_row[tech] = label
+
     string_cols = [f"string_{i:02d}" for i in range(1, 66)]
 
-    # Visible columns should match what the user sees:
-    # only columns with a non-empty business label in the header row.
     def has_label(col: str) -> bool:
         return bool((header_row.get(col) or "").strip())
 
     visible_cols = [c for c in string_cols if has_label(c)]
-
-    # Column labels used by the table header
     col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
-
-    # For export links (CSV/JSON): pass visible columns as a query param
     export_cols_csv = ",".join(visible_cols)
+
+    # --- Metadata source-of-truth resolution ---
+    # For an approved header: use the approved CR's fields (business_owner_sid, approver_ad_group).
+    # For a new/unapproved header: fall back to MDUHeader fields directly so the detail
+    # page is never blank after a steward fills in the form.
+    if latest:
+        detail_business_owner = latest.business_owner_sid or ""
+        detail_approver_group = latest.approver_ad_group or header.approver_group_mapping or ""
+    else:
+        # No approved change yet — use the header's own fields as the live source.
+        # These were written by header_create / header_edit (form.save()).
+        detail_business_owner = ""   # no CR to get this from; form doesn't capture it
+        detail_approver_group = header.approver_group_mapping or ""
+
+    # Expose resolved values so the template never needs conditional logic
+    header.detail_business_owner = detail_business_owner
+    header.detail_approver_group = detail_approver_group
 
     # Change history
     changes = header.changes.all().order_by("-created_at")
@@ -482,11 +610,8 @@ def header_detail(request, pk):
     cert_version = None
 
     if latest_cert:
-        # Your model uses cert_expiry_dttm (datetime). We'll derive a date for display/logic.
         expiry_dt = getattr(latest_cert, "cert_expiry_dttm", None)
         cert_expires_on = expiry_dt.date() if expiry_dt else None
-
-        # If your model has these fields, they'll be picked up; otherwise remain None.
         cert_certified_on = getattr(latest_cert, "certified_on", None)
         cert_version = getattr(latest_cert, "cert_version", None)
 
@@ -523,7 +648,7 @@ def header_detail(request, pk):
             "data_rows": data_rows,
             "visible_cols": visible_cols,
             "col_labels": col_labels,
-            "export_cols_csv": export_cols_csv,  # <-- use this in Export CSV/JSON links
+            "export_cols_csv": export_cols_csv,
             "changes": changes,
             "approved_count": header.changes.filter(status=ChangeRequest.Status.APPROVED).exclude(version__isnull=True).count(),
             "certs": certs,
@@ -760,16 +885,52 @@ def my_approvals(request):
     })
 
 def _next_display_id():
+    """
+    Generate the next PC-YYYY-NNNN display ID.
+
+    Uses MAX() on the numeric suffix to avoid ordering-by-string bugs, and
+    adds a small retry loop so that a simultaneous second request that lands
+    on the same candidate ID simply increments past it rather than crashing.
+    The caller must still be inside a transaction so the INSERT + this read
+    are atomic; the retry handles the residual race on SQLite where two
+    concurrent requests may read the same MAX before either has committed.
+    """
     year = timezone.now().strftime("%Y")
     prefix = f"PC-{year}-"
-    last = ChangeRequest.objects.filter(display_id__startswith=prefix).order_by("-display_id").first()
-    n = 1
-    if last:
+
+    # Find the highest numeric suffix already used this year.
+    existing = (
+        ChangeRequest.objects
+        .filter(display_id__startswith=prefix)
+        .values_list("display_id", flat=True)
+    )
+    max_n = 0
+    for did in existing:
         try:
-            n = int(last.display_id.split("-")[-1]) + 1
+            max_n = max(max_n, int(did.split("-")[-1]))
         except Exception:
-            n = 1
-    return f"{prefix}{n:04d}"
+            pass
+
+    return f"{prefix}{max_n + 1:04d}"
+
+
+def _create_cr_with_unique_display_id(**kwargs):
+    """
+    Create a ChangeRequest, retrying up to 5 times if display_id collides.
+    All callers that previously called _next_display_id() + CR.objects.create()
+    should use this instead.
+    """
+    from django.db import IntegrityError as _IE
+    for _attempt in range(5):
+        kwargs["display_id"] = _next_display_id()
+        try:
+            return ChangeRequest.objects.create(**kwargs)
+        except _IE as exc:
+            if "display_id" not in str(exc):
+                raise
+            # Another request grabbed the same ID — loop and try the next one.
+    # Fallback: should never reach here under normal load
+    raise RuntimeError("Could not generate a unique display ID after 5 attempts.")
 
 
 def _suggest_tracking_id():
@@ -1565,7 +1726,6 @@ def propose_change(request, header_pk):
             if form.is_valid():
                 ch = form.save(commit=False)
                 ch.header = header
-                ch.display_id = _next_display_id()
                 ch.created_by = request.user
 
                 if not ch.tracking_id:
@@ -1579,10 +1739,21 @@ def propose_change(request, header_pk):
                 ch.version = baseline_version_latest
 
                 try:
-                    ch.save()
+                    # Use the collision-safe helper so display_id races don't crash
+                    for _attempt in range(5):
+                        ch.display_id = _next_display_id()
+                        try:
+                            ch.save()
+                            break
+                        except IntegrityError as _ie:
+                            if "display_id" in str(_ie):
+                                continue   # retry with next ID
+                            # single-owner constraint or other — re-raise for outer handler
+                            raise
+                    else:
+                        raise RuntimeError("Could not generate a unique display ID after 5 attempts.")
                 except IntegrityError:
                     # DB constraint: one open CR per non-collab reference (SINGLE_OWNER)
-                    # Convert race-condition into the standard guardrail message.
                     messages.error(
                         request,
                         "A pending change already exists for this reference. Please wait for approval or rejection before proposing a new change."
@@ -1837,7 +2008,8 @@ def proposed_change_detail(request, pk):
     change_category_choices = dict(ChangeRequest._meta.get_field("change_category").flatchoices)
     change_category_label = change_category_choices.get(ch.change_category, ch.change_category or "")
 
-    return render(request, "mdu/proposed_change_detail.html", {
+    _rs_cols = _load_row_structure(ch.header)
+    context = {
         "ch": ch,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
@@ -1866,8 +2038,13 @@ def proposed_change_detail(request, pk):
             "deleted": deleted,
         },
         "header_metadata_diff": _get_header_metadata_diff(ch, ch.header),
+        "row_structure_cols": _rs_cols,
+        "composite_key_display": " + ".join(
+            c["field_name"] for c in _rs_cols if c["is_key"]
+        ) or "None",
         **_role_flags(request.user)
-    })
+    }
+    return render(request, "mdu/proposed_change_detail.html", context)
 @group_required("maker","steward")
 def proposed_change_edit(request, pk):
     
