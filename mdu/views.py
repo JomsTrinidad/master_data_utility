@@ -2195,6 +2195,7 @@ def proposed_change_detail(request, pk):
     context = {
         "ch": ch,
         "is_define": (ch.operation_hint == "DEFINE"),
+        "back_url": reverse("mdu:my_approvals") if can_decide else reverse("mdu:proposed_change_list"),
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
             _crumb("My Proposed Changes", reverse("mdu:proposed_change_list")),

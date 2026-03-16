@@ -1,21 +1,100 @@
 {% extends "base.html" %}
-{% block title %}Add certification{% endblock %}
+{% block title %}Add Certification{% endblock %}
+
 {% block content %}
-<div class="mb-3">
-  <h3 class="mb-0">Add certification</h3>
-  <div class="text-muted">Keep evidence links and expiry dates up to date.</div>
+
+<div class="mdu-page-header">
+  <div>
+    <div class="mdu-crumb"><a href="{% url 'mdu:cert_list' %}">Certifications</a></div>
+    <h1 style="font-size:1.55rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; line-height:1.2;">Add Certification</h1>
+    <div class="mdu-subtitle">Keep evidence links and expiry dates up to date.</div>
+  </div>
 </div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post">
+<div style="max-width:720px;">
+  <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.05); padding:1.75rem 2rem;">
+    <form method="post" novalidate>
       {% csrf_token %}
-      {{ form.as_p }}
-      <div class="d-flex justify-content-end gap-2">
-        <a class="btn btn-outline-secondary" href="{% url 'mdu:cert_list' %}">Cancel</a>
-        <button class="btn btn-primary" type="submit">Save</button>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">
+        <div>
+          <label class="mdu-label">Reference <span style="color:#dc3545;">*</span></label>
+          {{ form.header }}
+          {% if form.header.errors %}<div style="font-size:.78rem; color:#dc3545; margin-top:4px;">{{ form.header.errors.0 }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="mdu-label">Cycle ID <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="cert_cycle_id" class="mdu-input"
+                 value="{{ form.cert_cycle_id.value|default:'' }}"
+                 placeholder="e.g., Q4-2025">
+          {% if form.cert_cycle_id.errors %}<div style="font-size:.78rem; color:#dc3545; margin-top:4px;">{{ form.cert_cycle_id.errors.0 }}</div>{% endif %}
+        </div>
       </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">
+        <div>
+          <label class="mdu-label">Status <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="certification_status" class="mdu-input"
+                 value="{{ form.certification_status.value|default:'CERTIFIED' }}"
+                 placeholder="CERTIFIED">
+          {% if form.certification_status.errors %}<div style="font-size:.78rem; color:#dc3545; margin-top:4px;">{{ form.certification_status.errors.0 }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="mdu-label">Scope</label>
+          <input type="text" name="certification_scope" class="mdu-input"
+                 value="{{ form.certification_scope.value|default:'' }}"
+                 placeholder="e.g., GLOBAL, APAC">
+        </div>
+      </div>
+
+      <div style="margin-bottom:1.25rem;">
+        <label class="mdu-label">Summary</label>
+        <textarea name="certification_summary" class="mdu-input"
+                  style="min-height:72px; resize:vertical;"
+                  placeholder="Brief notes on what was certified and any caveats.">{{ form.certification_summary.value|default:'' }}</textarea>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">
+        <div>
+          <label class="mdu-label">Certified By</label>
+          <input type="text" name="certified_by_sid" class="mdu-input"
+                 value="{{ form.certified_by_sid.value|default:'' }}"
+                 placeholder="e.g., jdoe123">
+        </div>
+        <div>
+          <label class="mdu-label">Certified On</label>
+          <input type="datetime-local" name="certified_dttm" class="mdu-input"
+                 value="{{ form.certified_dttm.value|default:'' }}">
+        </div>
+        <div>
+          <label class="mdu-label">Expiry Date</label>
+          <input type="datetime-local" name="cert_expiry_dttm" class="mdu-input"
+                 value="{{ form.cert_expiry_dttm.value|default:'' }}">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.75rem;">
+        <div>
+          <label class="mdu-label">Evidence Link</label>
+          <input type="text" name="evidence_link" class="mdu-input"
+                 value="{{ form.evidence_link.value|default:'' }}"
+                 placeholder="https://…">
+        </div>
+        <div>
+          <label class="mdu-label">QA Issues Found</label>
+          <input type="text" name="qa_issues_found" class="mdu-input"
+                 value="{{ form.qa_issues_found.value|default:'' }}"
+                 placeholder="None, or brief description">
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:.6rem; border-top:1px solid #f1f5f9; padding-top:1.25rem;">
+        <a class="mdu-btn-secondary" href="{% url 'mdu:cert_list' %}">Cancel</a>
+        <button class="mdu-btn-primary" type="submit">Save Certification</button>
+      </div>
+
     </form>
   </div>
 </div>
+
 {% endblock %}

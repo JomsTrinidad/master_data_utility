@@ -1,20 +1,88 @@
 {% extends "base.html" %}
-{% load django_tables2 %}
-{% block title %}My Certifications{% endblock %}
+{% load mdu_extras %}
+{% block title %}Certifications{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
+
+<div class="mdu-page-header">
   <div>
-    <h3 class="mb-0">My Certifications</h3>
-    <div class="text-muted">Expiry warnings are shown automatically.</div>
+    <div class="mdu-crumb">Catalog</div>
+    <h1 style="font-size:1.55rem; font-weight:700; color:#0f172a; margin:0 0 .2rem; line-height:1.2;">Certifications</h1>
+    <div class="mdu-subtitle">Certification records with expiry tracking for governed references.</div>
   </div>
   {% if is_steward or is_approver %}
-    <a class="btn btn-outline-primary" href="{% url 'mdu:cert_create' %}">Add certification</a>
+  <div>
+    <a class="mdu-btn-primary" href="{% url 'mdu:cert_create' %}">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
+      Add Certification
+    </a>
+  </div>
   {% endif %}
 </div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    {% render_table table %}
-  </div>
+{% if table.data %}
+<div class="mdu-table-wrap">
+  <table class="mdu-data-table">
+    <thead>
+      <tr>
+        <th>Reference</th>
+        <th>Cycle ID</th>
+        <th>Status</th>
+        <th>Scope</th>
+        <th>Certified By</th>
+        <th>Certified On</th>
+        <th>Expiry</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cert in table.data %}
+      <tr>
+        <td style="font-weight:500; color:#0f172a;">{{ cert.header.ref_name }}</td>
+        <td class="mdu-cell-meta" style="font-family:ui-monospace,SFMono-Regular,monospace; font-size:.83rem;">{{ cert.cert_cycle_id }}</td>
+        <td>
+          {% if cert.certification_status == "CERTIFIED" %}
+            <span class="mdu-badge mdu-badge-success">Certified</span>
+          {% elif cert.certification_status == "EXPIRED" %}
+            <span class="mdu-badge mdu-badge-danger">Expired</span>
+          {% else %}
+            <span class="mdu-badge mdu-badge-neutral">{{ cert.certification_status }}</span>
+          {% endif %}
+        </td>
+        <td class="mdu-cell-meta">{{ cert.certification_scope|default:"&mdash;" }}</td>
+        <td class="mdu-cell-meta">{{ cert.certified_by_sid|default:"&mdash;" }}</td>
+        <td class="mdu-cell-meta">
+          {% if cert.certified_dttm %}{{ cert.certified_dttm|date:"M d, Y" }}{% else %}&mdash;{% endif %}
+        </td>
+        <td>
+          {% if cert.cert_expiry_dttm %}
+            {% if cert.is_expired %}
+              <span class="mdu-badge mdu-badge-danger">{{ cert.cert_expiry_dttm|date:"M d, Y" }}</span>
+            {% elif cert.is_expiring_soon %}
+              <span class="mdu-badge mdu-badge-warning">{{ cert.cert_expiry_dttm|date:"M d, Y" }}</span>
+            {% else %}
+              <span style="font-size:.855rem; color:#475569;">{{ cert.cert_expiry_dttm|date:"M d, Y" }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:#94a3b8;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
+
+{% else %}
+  <div style="text-align:center; padding:3rem 1rem; border:1px solid #e2e8f0; border-radius:8px; background:#fff;">
+    <div style="font-size:2rem; margin-bottom:.75rem;">🏅</div>
+    <div style="font-weight:600; color:#0f172a; margin-bottom:.3rem;">No certifications yet</div>
+    <div class="mdu-empty">Certifications track compliance status for your references.</div>
+    {% if is_steward or is_approver %}
+    <div style="margin-top:1.25rem;">
+      <a class="mdu-btn-primary" href="{% url 'mdu:cert_create' %}">Add the first certification</a>
+    </div>
+    {% endif %}
+  </div>
+{% endif %}
+
 {% endblock %}

@@ -59,6 +59,69 @@
 .pcd-approval-form textarea { width: 100%; padding: .55rem .85rem; font-size: .875rem; border: 1px solid #d1d5db; border-radius: 5px; background: #f9fafb; resize: vertical; min-height: 64px; transition: border-color .15s, box-shadow .15s; }
 .pcd-approval-form textarea:focus { background: #fff; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); outline: none; }
 
+/* ── Sticky decision footer (approver only) ──────────────── */
+/* Mirrors hf-action-bar: sticky inside the container, same width as sections */
+.pcd-sticky-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+  padding: 1rem 1.4rem 1.1rem;
+  margin: 1.5rem -12px -1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+}
+/* Label row */
+.pcd-footer-comment-label {
+  display: block;
+  font-size: .82rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0;
+}
+.pcd-footer-comment-label .pcd-required {
+  color: #dc2626;
+  margin-left: 2px;
+}
+/* Full-width textarea */
+.pcd-footer-textarea {
+  width: 100%;
+  padding: .55rem .85rem;
+  font-size: .875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #fff;
+  resize: none;
+  height: 72px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  display: block;
+}
+.pcd-footer-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+}
+/* Bottom action row: Back far-left, Approve+Reject far-right */
+.pcd-footer-btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: .75rem;
+}
+.pcd-footer-actions-right {
+  display: flex;
+  gap: .5rem;
+}
+.pcd-footer-hint {
+  display: none;
+  font-size: .78rem;
+  color: #ef4444;
+  margin-top: -4px;
+}
+
 /* ── View toggle bar ─────────────────────────────────────── */
 .pcd-view-bar {
   display: flex;
@@ -185,6 +248,7 @@
 {% endblock %}
 
 {% block content %}
+{% if can_decide %}<div class="pcd-content">{% else %}<div class="pcd-content">{% endif %}
 
 <!-- Page header -->
 <div class="mdu-page-header">
@@ -343,35 +407,6 @@
 
   </div>
 </details>
-
-
-<!-- ====== Approval (if can_decide) ====== -->
-{% if can_decide %}
-<details class="pcd-section" open>
-  <summary>
-    <span class="pcd-section-title">Approval Decision</span>
-    <svg class="pcd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
-  </summary>
-  <div class="pcd-section-body">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-      <div class="pcd-approval-form">
-        <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='approve' %}">
-          {% csrf_token %}
-          <textarea name="note" placeholder="Approval comment (required)" required></textarea>
-          <button class="mdu-btn-success" type="submit" style="width:100%; margin-top:.75rem;">Approve</button>
-        </form>
-      </div>
-      <div class="pcd-approval-form">
-        <form method="post" action="{% url 'mdu:proposed_change_decide' pk=ch.pk decision='reject' %}">
-          {% csrf_token %}
-          <textarea name="note" placeholder="Rejection comment (required)" required></textarea>
-          <button class="mdu-btn-danger" type="submit" style="width:100%; margin-top:.75rem;">Reject</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</details>
-{% endif %}
 
 
 <!-- ====== Load Files (if approved) ====== -->
@@ -792,5 +827,99 @@
 {% endif %}
 
 
+{# ── Sticky decision footer inside container — same width as collapsible sections ── #}
+{% if can_decide %}
+<div class="pcd-sticky-footer" id="pcdStickyFooter">
+  <form method="post" id="pcdDecisionForm" action="">
+    {% csrf_token %}
+
+    {# Label — asterisk shown/hidden by JS depending on action #}
+    <label class="pcd-footer-comment-label" id="pcdCommentLabel">
+      Decision Comment<span class="pcd-required" id="pcdRequiredMark" style="display:none;">*</span>
+    </label>
+
+    {# Full-width textarea #}
+    <textarea name="note" id="pcdComment" class="pcd-footer-textarea"
+              placeholder="Add a comment"></textarea>
+    <div id="pcdCommentHint" class="pcd-footer-hint">
+      A rejection comment is required before submitting.
+    </div>
+
+    {# Bottom row: Back far-left | Approve + Reject far-right #}
+    <div class="pcd-footer-btn-row">
+      <a href="{{ back_url }}" class="mdu-btn-secondary">Back</a>
+      <div class="pcd-footer-actions-right">
+        <button type="button" id="pcdBtnApprove" class="mdu-btn-success">
+          Approve
+        </button>
+        <button type="button" id="pcdBtnReject" class="mdu-btn-danger">
+          Reject
+        </button>
+      </div>
+    </div>
+
+  </form>
+</div>
+{% endif %}
+
+</div>{# /.pcd-content #}
+
+{% if can_decide %}
+<script>
+(function () {
+  var form      = document.getElementById("pcdDecisionForm");
+  var commentEl = document.getElementById("pcdComment");
+  var labelEl   = document.getElementById("pcdCommentLabel");
+  var hintEl    = document.getElementById("pcdCommentHint");
+
+  var approveUrl = "{% url 'mdu:proposed_change_decide' pk=ch.pk decision='approve' %}";
+  var rejectUrl  = "{% url 'mdu:proposed_change_decide' pk=ch.pk decision='reject' %}";
+
+  var requiredMark = document.getElementById("pcdRequiredMark");
+
+  /* Approve: comment optional — submit directly */
+  document.getElementById("pcdBtnApprove").addEventListener("click", function () {
+    /* Clear any reject error state */
+    commentEl.style.borderColor = "";
+    commentEl.style.boxShadow   = "";
+    hintEl.style.display        = "none";
+    form.action = approveUrl;
+    form.submit();
+  });
+
+  /* Reject: comment required */
+  document.getElementById("pcdBtnReject").addEventListener("click", function () {
+    var note = commentEl.value.trim();
+    if (!note) {
+      commentEl.style.borderColor = "#ef4444";
+      commentEl.style.boxShadow   = "0 0 0 3px rgba(239,68,68,.12)";
+      hintEl.style.display        = "block";
+      commentEl.focus();
+      return;
+    }
+    form.action = rejectUrl;
+    form.submit();
+  });
+
+  /* Show required asterisk only when Reject is focused / used */
+  document.getElementById("pcdBtnReject").addEventListener("mouseenter", function () {
+    requiredMark.style.display = "inline";
+    commentEl.placeholder = "Rejection comment is required";
+  });
+  document.getElementById("pcdBtnReject").addEventListener("mouseleave", function () {
+    if (!commentEl.style.borderColor) {
+      requiredMark.style.display = "none";
+      commentEl.placeholder = "Add a comment";
+    }
+  });
+
+  commentEl.addEventListener("input", function () {
+    commentEl.style.borderColor = "";
+    commentEl.style.boxShadow   = "";
+    hintEl.style.display        = "none";
+  });
+})();
+</script>
+{% endif %}
 
 {% endblock %}
