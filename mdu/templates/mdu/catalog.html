@@ -333,8 +333,8 @@
 
           <td class="cat-ref-name">{{ row.ref_name }}</td>
           <td class="cat-desc" title="{{ row.description }}">{{ row.description|truncatechars:40 }}</td>
-          <td class="cat-meta">{{ row.ref_type }}</td>
-          <td class="cat-meta">{{ row.mode }}</td>
+          <td class="cat-meta">{{ row.ref_type|upper }}</td>
+          <td class="cat-meta">{% if row.mode == "versioning" %}VERSIONED{% else %}SNAPSHOT{% endif %}</td>
           <td class="cat-meta">{{ row.get_status_display }}</td>
           <td class="cat-meta">
             {% if row.last_approved_change and row.last_approved_change.version is not None %}
@@ -345,7 +345,7 @@
               <span class="cat-empty">&mdash;</span>
             {% endif %}
           </td>
-          <td class="cat-meta">{% if row.collaboration_mode == "COLLABORATIVE" %}Collab{% else %}Single{% endif %}</td>
+          <td class="cat-meta">{% if row.collaboration_mode == "COLLABORATIVE" %}COLLAB{% else %}SINGLE{% endif %}</td>
           <td class="cat-meta">{{ row.updated_at|date:"m/d/Y g a" }}</td>
         </tr>
       {% empty %}

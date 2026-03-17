@@ -40,112 +40,27 @@ def _build_cols(left_rows, right_rows):
         cols.append({"tech": col, "biz": biz})
     return cols
 
-@login_required
-def compare_versions(request, pk):
-    header = get_object_or_404(MDUHeader, pk=pk)
 
-    # Approved changes with numeric versions
-    approved = header.changes.filter(status=ChangeRequest.Status.APPROVED).exclude(version__isnull=True).order_by("-version")
+def _revision_label(ch):
+    """
+    Human-readable revision label: 'v1 · PC-2026-001'
+    Used in dropdowns and comparison headings.
+    """
+    ver = f"v{ch.version}" if ch.version is not None else "v—"
+    return f"{ver} · {ch.display_id}"
 
-    v1 = request.GET.get("v1")
-    v2 = request.GET.get("v2")
 
-    left = approved.filter(version=int(v1)).first() if v1 else None
-    right = approved.filter(version=int(v2)).first() if v2 else None
-
-    left_rows = _rows(left.payload_json) if left else []
+def _build_diff(left, right):
+    """Build biz_cols and diff_rows for any two approved CRs."""
+    left_rows  = _rows(left.payload_json)  if left  else []
     right_rows = _rows(right.payload_json) if right else []
-
-    biz_cols = _build_cols(left_rows, right_rows) if (left and right) else []
-    diff_rows = []
+    biz_cols   = _build_cols(left_rows, right_rows) if (left and right) else []
+    diff_rows  = []
 
     if left and right:
-        lv = [r for r in left_rows if (r.get("row_type") or "").lower() != "header"]
+        lv = [r for r in left_rows  if (r.get("row_type") or "").lower() != "header"]
         rv = [r for r in right_rows if (r.get("row_type") or "").lower() != "header"]
-
-        max_len = max(len(lv), len(rv))
-        for i in range(max_len):
-            a = lv[i] if i < len(lv) else {}
-            b = rv[i] if i < len(rv) else {}
-
-            cells = []
-            row_changed = False
-
-            for col in biz_cols:
-                tech = col["tech"]
-                av = (a.get(tech) or "").strip()
-                bv = (b.get(tech) or "").strip()
-                changed = av != bv
-
-                if changed:
-                    row_changed = True
-
-                cells.append({
-                    "before": av,
-                    "after": bv,
-                    "changed": changed,
-                })
-
-            diff_rows.append({
-                "key": f"row:{i+1}",
-                "cells": cells,
-                "row_changed": row_changed,
-            })
-
-    return render(
-        request,
-        "mdu/compare_versions.html",
-        {
-            "header": header,
-            "approved": approved,
-            "left": left,
-            "right": right,
-            "biz_cols": biz_cols,
-            "diff_rows": diff_rows,
-            "breadcrumbs": [
-                {"label": "Catalog", "url": reverse("mdu:catalog")},
-                {"label": header.ref_name, "url": reverse("mdu:header_detail", kwargs={"pk": header.pk})},
-                {"label": "Compare Versions", "url": None},
-            ],
-        },
-    )
-
-
-@login_required
-def compare_modal(request, pk):
-    header = get_object_or_404(MDUHeader, pk=pk)
-
-    approved = (
-        header.changes
-        .filter(status=ChangeRequest.Status.APPROVED)
-        .exclude(version__isnull=True)
-        .order_by("-version")
-    )
-
-    latest_version = approved.first().version if approved.exists() else None
-
-    # Default: LEFT = latest approved version
-    v_left = request.GET.get("left")
-    v_right = request.GET.get("right")
-
-    if not v_left and latest_version is not None:
-        v_left = str(latest_version)
-
-    left = approved.filter(version=int(v_left)).first() if v_left else None
-    right = approved.filter(version=int(v_right)).first() if v_right else None
-
-    left_rows = _rows(left.payload_json) if left else []
-    right_rows = _rows(right.payload_json) if right else []
-
-    biz_cols = _build_cols(left_rows, right_rows) if (left and right) else []
-    diff_rows = []
-
-    if left and right:
-        lv = [r for r in left_rows if (r.get("row_type") or "").lower() != "header"]
-        rv = [r for r in right_rows if (r.get("row_type") or "").lower() != "header"]
-
-        max_len = max(len(lv), len(rv))
-        for i in range(max_len):
+        for i in range(max(len(lv), len(rv))):
             a = lv[i] if i < len(lv) else {}
             b = rv[i] if i < len(rv) else {}
             cells = []
@@ -160,19 +75,77 @@ def compare_modal(request, pk):
                 cells.append({"before": av, "after": bv, "changed": changed})
             diff_rows.append({"key": f"row:{i+1}", "cells": cells, "row_changed": row_changed})
 
+    return biz_cols, diff_rows
+
+
+@login_required
+def compare_versions(request, pk):
+    header   = get_object_or_404(MDUHeader, pk=pk)
+    # All approved CRs — any two can be compared regardless of version number
+    approved = (
+        header.changes
+        .filter(status=ChangeRequest.Status.APPROVED)
+        .order_by("-created_at")
+    )
+
+    left_pk  = request.GET.get("v1")
+    right_pk = request.GET.get("v2")
+    left  = approved.filter(pk=int(left_pk)).first()  if left_pk  else None
+    right = approved.filter(pk=int(right_pk)).first() if right_pk else None
+
+    biz_cols, diff_rows = _build_diff(left, right)
+
+    return render(
+        request,
+        "mdu/compare_versions.html",
+        {
+            "header":    header,
+            "approved":  approved,
+            "left":      left,
+            "right":     right,
+            "biz_cols":  biz_cols,
+            "diff_rows": diff_rows,
+            "breadcrumbs": [
+                {"label": "Catalog",             "url": reverse("mdu:catalog")},
+                {"label": header.ref_name,       "url": reverse("mdu:header_detail", kwargs={"pk": header.pk})},
+                {"label": "Compare Revisions",   "url": None},
+            ],
+        },
+    )
+
+
+@login_required
+def compare_modal(request, pk):
+    header   = get_object_or_404(MDUHeader, pk=pk)
+    approved = (
+        header.changes
+        .filter(status=ChangeRequest.Status.APPROVED)
+        .order_by("-created_at")
+    )
+
+    # Default left = most recent approved CR
+    left_pk  = request.GET.get("left")
+    right_pk = request.GET.get("right")
+
+    if not left_pk and approved.exists():
+        left_pk = str(approved.first().pk)
+
+    left  = approved.filter(pk=int(left_pk)).first()  if left_pk  else None
+    right = approved.filter(pk=int(right_pk)).first() if right_pk else None
+
+    biz_cols, diff_rows = _build_diff(left, right)
     changed_count = sum(1 for r in diff_rows if r.get("row_changed"))
 
     return render(
         request,
         "mdu/partials/compare_modal.html",
         {
-            "header": header,
-            "approved": approved,
-            "latest_version": latest_version,
-            "left": left,
-            "right": right,
-            "biz_cols": biz_cols,
-            "diff_rows": diff_rows,
+            "header":        header,
+            "approved":      approved,
+            "left":          left,
+            "right":         right,
+            "biz_cols":      biz_cols,
+            "diff_rows":     diff_rows,
             "changed_count": changed_count,
         },
     )

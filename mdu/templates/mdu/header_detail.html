@@ -354,6 +354,51 @@
   .hd-attr-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
   .hd-header { flex-direction: column; }
 }
+
+/* --- Sub-group labels (within merged section) --- */
+.hd-subgroup-label {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-size: .76rem;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: .8rem;
+}
+.hd-subgroup-label::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 1rem;
+  background: #1e293b;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.hd-subgroup-body {
+  padding-left: .65rem;
+  margin-bottom: 1.75rem;
+}
+/* Fixed 5-col grid for Reference Identity */
+.hd-attr-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 900px) {
+  .hd-attr-grid-5 { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* --- Activity strip (bottom of merged section) --- */
+.hd-activity-strip {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1.1rem;
+  margin-top: .25rem;
+}
 </style>
 {% endblock %}
 
@@ -397,32 +442,30 @@
 
 
 <!-- ============================================================
-     SECTION 1: Overview  (open by default)
+     SECTION 1: Reference Definition  (merged overview + business context)
      ============================================================ -->
 <details class="hd-section" open>
   <summary>
-    <span class="hd-section-title">Overview</span>
+    <span class="hd-section-title">Reference Definition</span>
     <svg class="hd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
   </summary>
   <div class="hd-section-body">
 
-    <div class="hd-attr-grid">
-
+    {# ── Reference Identity ── #}
+    <div class="hd-subgroup-label">Reference Identity</div>
+    <div class="hd-attr-grid hd-attr-grid-5 hd-subgroup-body">
       <div>
         <div class="hd-attr-label">Reference Name</div>
-        <div class="hd-attr-value">{{ header.ref_name }}</div>
+        <div class="hd-attr-value" style="text-transform:uppercase;">{{ header.ref_name }}</div>
       </div>
-
       <div>
-        <div class="hd-attr-label">Type</div>
+        <div class="hd-attr-label">Reference Type</div>
         <div class="hd-attr-value">{{ header.ref_type|upper }}</div>
       </div>
-
       <div>
-        <div class="hd-attr-label">Mode</div>
-        <div class="hd-attr-value">{{ header.mode|title }}</div>
+        <div class="hd-attr-label">Data Change Mode</div>
+        <div class="hd-attr-value">{% if header.mode == "versioning" %}VERSIONED{% else %}SNAPSHOT{% endif %}</div>
       </div>
-
       <div>
         <div class="hd-attr-label">Status</div>
         <div class="hd-attr-value">
@@ -437,114 +480,192 @@
           {% endif %}
         </div>
       </div>
-
       <div>
         <div class="hd-attr-label">Current Version</div>
         <div class="hd-attr-value">{% if current_version is not None %}v{{ current_version }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
       </div>
+    </div>
 
-      <div>
-        <div class="hd-attr-label">Workflow</div>
-        <div class="hd-attr-value">{% if header.collaboration_mode == "COLLABORATIVE" %}Collaborative{% else %}Single Owner{% endif %}</div>
-      </div>
-
-      <div>
-        <div class="hd-attr-label">Data Classification</div>
-        <div class="hd-attr-value">{{ header.data_classification|default:"GENERAL" }}</div>
-      </div>
-
-      <div>
-        <div class="hd-attr-label">Created</div>
-        <div class="hd-attr-value">{% if header.created_at %}{{ header.created_at|date:"M d, Y" }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
-      </div>
-
-      <div>
-        <div class="hd-attr-label">Last Updated</div>
-        <div class="hd-attr-value">{% if header.updated_at %}{{ header.updated_at|date:"M d, Y g:i a" }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
-      </div>
-
+    {# ── Governance ── #}
+    <div class="hd-subgroup-label">Governance</div>
+    <div class="hd-attr-grid hd-subgroup-body">
       <div>
         <div class="hd-attr-label">Business Owner</div>
         <div class="hd-attr-value">{% if header.detail_business_owner %}{{ header.detail_business_owner }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
       </div>
-
       <div>
         <div class="hd-attr-label">Approver Group</div>
         <div class="hd-attr-value">{% if header.detail_approver_group %}{{ header.detail_approver_group }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
       </div>
-
+      <div>
+        <div class="hd-attr-label">Approval Model</div>
+        <div class="hd-attr-value">{{ header.get_approval_model_display|default:"&mdash;" }}</div>
+      </div>
+      <div>
+        <div class="hd-attr-label">Approval Scope</div>
+        <div class="hd-attr-value">{{ header.get_approval_scope_display|default:"&mdash;" }}</div>
+      </div>
+      <div>
+        <div class="hd-attr-label">Workflow Type</div>
+        <div class="hd-attr-value">{% if header.collaboration_mode == "COLLABORATIVE" %}COLLAB{% else %}SINGLE{% endif %}</div>
+      </div>
+      <div>
+        <div class="hd-attr-label">Data Classification</div>
+        <div class="hd-attr-value">{{ header.get_data_classification_display|default:"&mdash;" }}</div>
+      </div>
     </div>
 
-    <!-- Certification row -->
-    <div class="hd-attr-grid" style="margin-top: 1.25rem;">
+    {# ── Business Context ── #}
+    <div class="hd-subgroup-label">Business Context</div>
+    <div class="hd-attr-grid hd-subgroup-body">
       <div>
-        <div class="hd-attr-label">Certification</div>
-        <div class="hd-attr-value">
-          <span class="hd-badge hd-badge-{{ cert_badge_class }}">{{ cert_label }}</span>
-          {% if cert_version %}<span class="hd-change-meta" style="margin-left:6px;">v{{ cert_version }}</span>{% endif %}
-          {% if cert_expires_on %}<span class="hd-change-meta" style="margin-left:6px;">Expires {{ cert_expires_on|date:"M d, Y" }}</span>{% endif %}
-        </div>
+        <div class="hd-attr-label">Category</div>
+        <div class="hd-attr-value">{{ header.category|default:"&mdash;" }}</div>
       </div>
-
       <div>
-        <div class="hd-attr-label">Latest Approved Change</div>
-        <div class="hd-attr-value">
-          {% if latest %}
-            <a class="hd-change-id"
-               href="#"
-               hx-get="{% url 'mdu:change_modal' latest.pk %}"
-               hx-target="#change-modal-content"
-               data-bs-toggle="modal"
-               data-bs-target="#changeModal">
-              {{ latest.display_id }}
-            </a>
-            {% if latest.decided_at %}
-              <span class="hd-change-meta" style="margin-left:6px;">{{ latest.decided_at|date:"M d, Y" }}</span>
+        <div class="hd-attr-label">Business Function</div>
+        <div class="hd-attr-value">{{ header.owning_domain_lob|default:"&mdash;" }}</div>
+      </div>
+      <div>
+        <div class="hd-attr-label">Certification Required</div>
+        <div class="hd-attr-value">{% if header.certification_required %}Yes{% else %}No{% endif %}</div>
+      </div>
+    </div>
+
+    {# Tags — pills #}
+    {% if tag_list %}
+    <div style="padding-left:.65rem; margin-bottom:1.25rem;">
+      <div class="hd-attr-label" style="margin-bottom:.5rem;">Tags</div>
+      <div style="display:flex; flex-wrap:wrap; gap:.4rem;">
+        {% for tag in tag_list %}
+          <span style="display:inline-block; padding:.22rem .75rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:20px; font-size:.78rem; font-weight:500; color:#374151;">{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# Description #}
+    {% if header.description %}
+    <div style="padding-left:.65rem; margin-bottom:1.25rem;">
+      <div class="hd-description">
+        <div class="hd-description-label">Description</div>
+        <div class="hd-description-text">{{ header.description }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Activity strip ── #}
+    <div class="hd-activity-strip">
+      <div style="display:flex; gap:2.5rem; flex-wrap:wrap;">
+        <div>
+          <div class="hd-attr-label">Certification</div>
+          <div class="hd-attr-value" style="margin-top:3px;">
+            <span class="hd-badge hd-badge-{{ cert_badge_class }}">{{ cert_label }}</span>
+            {% if cert_version %}<span class="hd-change-meta" style="margin-left:6px;">v{{ cert_version }}</span>{% endif %}
+            {% if cert_expires_on %}<span class="hd-change-meta" style="margin-left:6px;">Expires {{ cert_expires_on|date:"M d, Y" }}</span>{% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="hd-attr-label">Latest Approved Change</div>
+          <div class="hd-attr-value" style="margin-top:3px;">
+            {% if latest %}
+              <a class="hd-change-id"
+                 href="#"
+                 hx-get="{% url 'mdu:change_modal' latest.pk %}"
+                 hx-target="#change-modal-content"
+                 data-bs-toggle="modal"
+                 data-bs-target="#changeModal">
+                {{ latest.display_id }}
+              </a>
+              {% if latest.decided_at %}
+                <span class="hd-change-meta" style="margin-left:6px;">{{ latest.decided_at|date:"M d, Y" }}</span>
+              {% endif %}
+            {% else %}
+              <span class="hd-empty">&mdash;</span>
             {% endif %}
-          {% else %}
-            <span class="hd-empty">&mdash;</span>
-          {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="hd-attr-label">Last Updated</div>
+          <div class="hd-attr-value" style="margin-top:3px;">{% if header.updated_at %}{{ header.updated_at|date:"M d, Y" }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
         </div>
       </div>
 
-      <div>
-        <div class="hd-attr-label">Risk Impact</div>
-        <div class="hd-attr-value">{% if latest and latest.risk_impact %}{{ latest.risk_impact }}{% else %}<span class="hd-empty">&mdash;</span>{% endif %}</div>
+      {% if is_steward or is_approver %}
+      <div style="flex-shrink:0;">
+        {% if header.last_approved_change %}
+          <a class="hd-btn-primary"
+             href="{% url 'mdu:propose_change' header_pk=header.pk %}"
+             style="font-size:.84rem;"
+             title="Changes to metadata require approval once a reference has been approved">
+            Propose Metadata Change
+          </a>
+        {% else %}
+          <a class="hd-btn-primary"
+             href="{% url 'mdu:header_edit' header.pk %}"
+             style="font-size:.84rem;">
+            Edit Meta Data
+          </a>
+        {% endif %}
       </div>
-    </div>
-
-    <!-- Description -->
-    {% if is_steward or is_approver %}
-    <div style="display:flex; justify-content:flex-end; margin-bottom:.6rem;">
-      {% if header.last_approved_change %}
-        <a class="hd-btn-primary"
-           href="{% url 'mdu:propose_change' header_pk=header.pk %}"
-           style="font-size:.84rem;"
-           title="Changes to metadata require approval once a reference has been approved">
-          Propose Metadata Change
-        </a>
-      {% else %}
-        <a class="hd-btn-primary"
-           href="{% url 'mdu:header_edit' header.pk %}"
-           style="font-size:.84rem;">
-          Edit Meta Data
-        </a>
       {% endif %}
     </div>
-    {% endif %}
-    {% if header.description %}
-    <div class="hd-description">
-      <div class="hd-description-label">Description</div>
-      <div class="hd-description-text">{{ header.description }}</div>
-    </div>
-    {% endif %}
 
   </div>
 </details>
 
 
 <!-- ============================================================
-     SECTION 2: Approved Data  (open by default)
+     SECTION 3: Row Structure
+     ============================================================ -->
+<details class="hd-section" open>
+  <summary>
+    <span class="hd-section-title">Row Structure <span class="hd-section-count">({{ row_structure_cols|length }} fields)</span></span>
+    <svg class="hd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
+  </summary>
+  <div class="hd-section-body">
+    {% if row_structure_cols %}
+    <table style="width:100%; border-collapse:collapse; font-size:.855rem;">
+      <thead>
+        <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+          <th style="padding:.55rem 1rem; text-align:left; font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; width:110px;">Placeholder</th>
+          <th style="padding:.55rem 1rem; text-align:left; font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;">Field Name</th>
+          <th style="padding:.55rem 1rem; text-align:center; font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; width:90px;">Key Field</th>
+          <th style="padding:.55rem 1rem; text-align:left; font-size:.75rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for col in row_structure_cols %}
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:.65rem 1rem;">
+            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block; min-width:6.5rem; text-align:center;">{{ col.placeholder_label }}</span>
+          </td>
+          <td style="padding:.65rem 1rem; font-weight:{% if col.is_key %}600{% else %}400{% endif %}; color:{% if col.is_key %}#0f172a{% else %}#374151{% endif %};">
+            {{ col.field_name }}
+          </td>
+          <td style="padding:.65rem 1rem; text-align:center;">
+            {% if col.is_key %}
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:#1e293b; border-radius:3px;">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 6 4.5 9.5 10.5 2.5"/></svg>
+              </span>
+            {% else %}
+              <span style="color:#cbd5e1;">&mdash;</span>
+            {% endif %}
+          </td>
+          <td style="padding:.65rem 1rem; color:#64748b; font-size:.83rem;">{{ col.description|default:"&mdash;" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center; padding:2rem 1rem; color:#8a8a9a;">No row structure defined yet.</div>
+    {% endif %}
+  </div>
+</details>
+
+
+<!-- ============================================================
+     SECTION 4: Approved Data  (open by default)
      ============================================================ -->
 <details class="hd-section" open>
   <summary>
@@ -554,7 +675,7 @@
   <div class="hd-section-body">
 
     <div class="hd-export-bar">
-      <div class="hd-export-hint">Full dataset from the latest approved change.</div>
+      {% if data_rows %}<div class="hd-export-hint">Full dataset from the latest approved change.</div>{% else %}<div></div>{% endif %}
 
       <div class="hd-export-actions">
 
@@ -629,7 +750,7 @@
 
 
 <!-- ============================================================
-     SECTION 3: Change History  (collapsed by default)
+     SECTION 5: Change History  (collapsed by default)
      ============================================================ -->
 <details class="hd-section">
   <summary>
@@ -649,7 +770,7 @@
           Compare Versions
         </a>
       {% else %}
-        <span class="hd-btn-disabled" title="At least two approved versions are required to compare.">Compare Versions</span>
+        <span class="hd-btn-disabled" title="At least two approved revisions are required to compare.">Compare Versions</span>
       {% endif %}
     </div>
 
@@ -671,7 +792,7 @@
               data-href="{% url 'mdu:proposed_change_detail' pk=ch.pk %}?from={% url 'mdu:header_detail' pk=header.pk %}"
               class="clickable-row">
             <td style="padding:.65rem 1rem;">
-              <span style="color:#475569;">{{ ch.display_id }}</span>
+              <span style="color:#2563eb; font-weight:500;">{{ ch.display_id }}</span>
             </td>
             <td style="padding:.65rem 1rem;">
               <span class="hd-change-badge
@@ -701,7 +822,7 @@
 
 
 <!-- ============================================================
-     SECTION 4: Certifications  (collapsed by default)
+     SECTION 6: Certifications  (collapsed by default)
      ============================================================ -->
 <details class="hd-section">
   <summary>

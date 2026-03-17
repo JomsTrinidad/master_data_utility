@@ -690,7 +690,7 @@ def header_detail(request, pk):
             "col_labels": col_labels,
             "export_cols_csv": export_cols_csv,
             "changes": changes,
-            "approved_count": header.changes.filter(status=ChangeRequest.Status.APPROVED).exclude(version__isnull=True).count(),
+            "approved_count": header.changes.filter(status=ChangeRequest.Status.APPROVED).count(),
             "certs": certs,
             "latest_cert": latest_cert,
             "cert_badge": cert_badge,
@@ -701,6 +701,8 @@ def header_detail(request, pk):
             "cert_expires_on": cert_expires_on,
             "cert_certified_on": cert_certified_on,
             "cert_version": cert_version,
+            "row_structure_cols": _load_row_structure(header),
+            "tag_list": [t.strip() for t in (header.tags or "").split(",") if t.strip()],
             **_role_flags(request.user),
         },
     )

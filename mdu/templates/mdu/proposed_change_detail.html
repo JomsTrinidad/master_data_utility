@@ -667,7 +667,7 @@
         {% for col in row_structure_cols %}
         <tr>
           <td>
-            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block;">{{ col.placeholder_label }}</span>
+            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block; min-width:6.5rem; text-align:center;">{{ col.placeholder_label }}</span>
           </td>
           <td style="font-weight:{% if col.is_key %}600{% else %}400{% endif %}; color:{% if col.is_key %}#0f172a{% else %}#374151{% endif %};">
             {{ col.field_name }}
@@ -922,4 +922,40 @@
 </script>
 {% endif %}
 
+<script>
+(function () {
+  /* Prevent the bounce on view-toggle and diff-format links by
+     navigating programmatically so the browser never resets scroll. */
+  var anchors = document.querySelectorAll(
+    '.pcd-toggle a, .pcd-diff-link'
+  );
+  anchors.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+
+      /* Build the target URL, strip any #fragment so the browser
+         doesn't trigger its own anchor-scroll on the new page. */
+      var url = a.href.replace(/#.*$/, '');
+
+      /* Record current scroll position — we'll restore it after load. */
+      var scrollY = window.scrollY;
+
+      /* Navigate without the hash so there's no jump, then restore. */
+      window.location.href = url;
+
+      /* sessionStorage so the restore survives the page load. */
+      sessionStorage.setItem('pcd_restore_scroll', scrollY);
+    });
+  });
+
+  /* On page load, restore saved scroll position if present. */
+  var saved = sessionStorage.getItem('pcd_restore_scroll');
+  if (saved !== null) {
+    sessionStorage.removeItem('pcd_restore_scroll');
+    window.scrollTo({ top: parseInt(saved, 10), behavior: 'instant' });
+  }
+})();
+</script>
 {% endblock %}
+
+
