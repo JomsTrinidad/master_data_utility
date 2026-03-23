@@ -654,6 +654,17 @@
     <svg class="pcd-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7.5L10 12.5L15 7.5"/></svg>
   </summary>
   <div class="pcd-section-body">
+
+    {# For versioned references: one banner, shown only when system rows exist — use loop with break-equivalent #}
+    {% with has_system=row_structure_cols|dictsort:"is_system"|last %}
+    {% if has_system.is_system %}
+    <div style="display:flex; align-items:center; gap:.5rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:.45rem .85rem; margin-bottom:.75rem; font-size:.82rem; color:#64748b;">
+      <span style="font-size:.95rem;">ℹ️</span>
+      <span><strong style="color:#0f172a;">start_dt</strong> and <strong style="color:#0f172a;">end_dt</strong> are system-managed date fields for versioned references. They are stored separately from the <code>string_XX</code> column space — business fields begin at <strong>string_01</strong>.</span>
+    </div>
+    {% endif %}
+    {% endwith %}
+
     <table class="pcd-table" style="font-size:.855rem;">
       <thead>
         <tr>
@@ -665,12 +676,12 @@
       </thead>
       <tbody>
         {% for col in row_structure_cols %}
-        <tr>
+        <tr style="{% if col.is_system %}background:#f8fafc;{% endif %}">
           <td>
-            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block; min-width:6.5rem; text-align:center;">{{ col.placeholder_label }}</span>
+            <span style="font-family:monospace; font-size:.8rem; color:#64748b; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:.18rem .45rem; display:inline-block; min-width:6.5rem; text-align:left;">{{ col.placeholder_label }}</span>
           </td>
           <td style="font-weight:{% if col.is_key %}600{% else %}400{% endif %}; color:{% if col.is_key %}#0f172a{% else %}#374151{% endif %};">
-            {{ col.field_name }}
+            {{ col.field_name }}{% if col.is_system %} <span style="font-size:.75rem; font-weight:400; color:#94a3b8;">(system)</span>{% endif %}
           </td>
           <td style="text-align:center;">
             {% if col.is_key %}
@@ -922,40 +933,4 @@
 </script>
 {% endif %}
 
-<script>
-(function () {
-  /* Prevent the bounce on view-toggle and diff-format links by
-     navigating programmatically so the browser never resets scroll. */
-  var anchors = document.querySelectorAll(
-    '.pcd-toggle a, .pcd-diff-link'
-  );
-  anchors.forEach(function (a) {
-    a.addEventListener('click', function (e) {
-      e.preventDefault();
-
-      /* Build the target URL, strip any #fragment so the browser
-         doesn't trigger its own anchor-scroll on the new page. */
-      var url = a.href.replace(/#.*$/, '');
-
-      /* Record current scroll position — we'll restore it after load. */
-      var scrollY = window.scrollY;
-
-      /* Navigate without the hash so there's no jump, then restore. */
-      window.location.href = url;
-
-      /* sessionStorage so the restore survives the page load. */
-      sessionStorage.setItem('pcd_restore_scroll', scrollY);
-    });
-  });
-
-  /* On page load, restore saved scroll position if present. */
-  var saved = sessionStorage.getItem('pcd_restore_scroll');
-  if (saved !== null) {
-    sessionStorage.removeItem('pcd_restore_scroll');
-    window.scrollTo({ top: parseInt(saved, 10), behavior: 'instant' });
-  }
-})();
-</script>
 {% endblock %}
-
-

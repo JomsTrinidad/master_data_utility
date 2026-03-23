@@ -1,4 +1,5 @@
 import json, os, csv, io, re, hashlib, logging
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.utils import timezone
@@ -199,12 +200,17 @@ def _rs_rows_from_post(post_data):
 def _load_row_structure(header):
     """
     Return a list of dicts for pre-populating the Row Structure section.
-    Each dict: {field_name, is_key, description, display_order, placeholder_label}
-    For versioned references, start_dt and end_dt are prepended as system-managed
-    key fields since they exist on the backend independently of MDUColumnDef.
+    Each dict: {field_name, is_key, description, display_order, placeholder_label, is_system}
+
+    Source priority:
+      1. MDUColumnDef rows (written when a DEFINE CR is approved)
+      2. Payload header row of the latest approved change (fallback when cols not yet written)
+      3. row_structure from the latest DEFINE CR payload (fallback for in-review refs)
+    For versioned references, start_dt / end_dt are always prepended as system rows.
     """
     if not header or not header.pk:
         return []
+
     key_col_pks = set()
     try:
         ck = header.composite_key
@@ -233,15 +239,79 @@ def _load_row_structure(header):
             "is_system":         True,
         })
 
-    for idx, col in enumerate(header.columns.order_by("pk"), start=1):
-        result.append({
-            "field_name":       col.ui_label or col.column_name,
-            "is_key":           col.pk in key_col_pks,
-            "description":      col.business_description,
-            "display_order":    idx,
-            "placeholder_label": col.column_name,
-            "is_system":        False,
-        })
+    # ── Primary source: MDUColumnDef rows ──────────────────────────────────
+    db_cols = list(header.columns.order_by("pk"))
+    if db_cols:
+        for idx, col in enumerate(db_cols, start=1):
+            result.append({
+                "field_name":        col.ui_label or col.column_name,
+                "is_key":            col.pk in key_col_pks,
+                "description":       col.business_description or "",
+                "display_order":     idx,
+                "placeholder_label": col.column_name,
+                "is_system":         False,
+            })
+        return result
+
+    # ── Fallback 1: row_structure from latest DEFINE CR payload ────────────
+    # Tried first (before payload header row) because it stores is_key per field.
+    define_cr = (
+        header.changes
+        .filter(operation_hint="DEFINE")
+        .order_by("-created_at")
+        .first()
+    )
+    if define_cr and define_cr.payload_json:
+        try:
+            obj = json.loads(define_cr.payload_json)
+            rs = obj.get("row_structure", [])
+            if rs:
+                for idx, col in enumerate(rs, start=1):
+                    fn = (col.get("field_name") or col.get("ui_label") or "").strip()
+                    if not fn:
+                        continue
+                    placeholder = col.get("placeholder_label") or f"string_{idx:02d}"
+                    result.append({
+                        "field_name":        fn,
+                        "is_key":            bool(col.get("is_key", False)),
+                        "description":       col.get("description") or col.get("business_description") or "",
+                        "display_order":     idx,
+                        "placeholder_label": placeholder,
+                        "is_system":         False,
+                    })
+                return result
+        except Exception:
+            pass
+
+    # ── Fallback 2: payload header row from last approved change ───────────
+    # Has field labels but not key info — is_key defaults to False.
+    lac = header.last_approved_change
+    if lac and lac.payload_json:
+        try:
+            obj = json.loads(lac.payload_json)
+            rows = obj.get("rows", [])
+            hdr_row = next(
+                (r for r in rows if (r.get("row_type") or "").lower() == "header"),
+                None,
+            )
+            if hdr_row:
+                string_cols = [f"string_{i:02d}" for i in range(1, 66)]
+                user_cols = [(k, v) for k in string_cols
+                             if (v := (hdr_row.get(k) or "").strip())]
+                if user_cols:
+                    for idx, (placeholder, label) in enumerate(user_cols, start=1):
+                        result.append({
+                            "field_name":        label,
+                            "is_key":            False,
+                            "description":       "",
+                            "display_order":     idx,
+                            "placeholder_label": placeholder,
+                            "is_system":         False,
+                        })
+                    return result
+        except Exception:
+            pass
+
     return result
 
 
@@ -423,7 +493,7 @@ def header_create(request):
         "mode": "create",
         "row_structure_errors": row_structure_errors,
         "attestation_error": attestation_error,
-        "existing_columns": rs_post_rows or _load_row_structure(None),
+        "existing_columns": rs_post_rows or [c for c in _load_row_structure(None) if not c.get("is_system", False)],
         "define_draft_cr": define_draft_cr,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
@@ -550,7 +620,7 @@ def header_edit(request, pk):
         "mode": "edit",
         "row_structure_errors": row_structure_errors,
         "attestation_error": attestation_error,
-        "existing_columns": rs_post_rows or _load_row_structure(header),
+        "existing_columns": rs_post_rows or [c for c in _load_row_structure(header) if not c.get("is_system", False)],
         "define_draft_cr": define_draft_cr,
         "breadcrumbs": [
             _crumb("Catalog", reverse("mdu:catalog")),
@@ -703,6 +773,17 @@ def header_detail(request, pk):
             "cert_version": cert_version,
             "row_structure_cols": _load_row_structure(header),
             "tag_list": [t.strip() for t in (header.tags or "").split(",") if t.strip()],
+            # Own DEFINE draft for this header — used to show Edit Draft button to creator
+            "own_draft_cr": (
+                header.changes
+                .filter(
+                    operation_hint="DEFINE",
+                    status=ChangeRequest.Status.DRAFT,
+                    created_by=request.user,
+                )
+                .order_by("-updated_at")
+                .first()
+            ),
             **_role_flags(request.user),
         },
     )
@@ -763,7 +844,10 @@ def proposed_change_list(request):
         baseline_fp_latest = info.get("baseline_fp")
 
         aligned = False
-        if d.version is not None and baseline_version_latest is not None:
+        if h.last_approved_change is None:
+            # No approved data yet — drafts on brand-new references can never be stale.
+            aligned = True
+        elif d.version is not None and baseline_version_latest is not None:
             aligned = (d.version == baseline_version_latest)
         else:
             aligned = (_normalized_payload_fingerprint(d.payload_json or "") == baseline_fp_latest)
@@ -838,7 +922,9 @@ def draft_bulk_delete(request):
         baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
 
         aligned = False
-        if d.version is not None and baseline_version_latest is not None:
+        if d.header.last_approved_change is None:
+            aligned = True
+        elif d.version is not None and baseline_version_latest is not None:
             aligned = (d.version == baseline_version_latest)
         else:
             aligned = (_normalized_payload_fingerprint(d.payload_json or "") == baseline_fp_latest)
@@ -1078,6 +1164,35 @@ def _normalized_payload_fingerprint(payload_json: str) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
+def _build_empty_payload_rows(header) -> list:
+    """
+    Build initial payload rows for a reference with no approved data.
+    Uses live MDUColumnDef row structure so columns match the definition.
+    Falls back to three generic placeholders if no columns are defined.
+    """
+    rs_cols = _load_row_structure(header)
+    user_cols = [c for c in rs_cols if not c.get("is_system", False)]
+
+    if not user_cols:
+        header_row = {
+            "row_type": "header", "operation": "BUILD NEW",
+            "string_01": "FIELD_01", "string_02": "FIELD_02", "string_03": "FIELD_03",
+        }
+        values_row = {
+            "row_type": "values", "operation": "INSERT ROW",
+            "string_01": "", "string_02": "", "string_03": "",
+        }
+        return [header_row, values_row]
+
+    header_row = {"row_type": "header", "operation": "BUILD NEW"}
+    values_row = {"row_type": "values",  "operation": "INSERT ROW"}
+    for i, col in enumerate(user_cols, start=1):
+        key = f"string_{i:02d}"
+        header_row[key] = col["field_name"]
+        values_row[key] = ""
+    return [header_row, values_row]
+
+
 def _current_baseline_for_header(header: MDUHeader) -> tuple[str, int | None]:
     """
     Returns (baseline_payload_json, baseline_version)
@@ -1111,14 +1226,14 @@ def _current_baseline_for_header(header: MDUHeader) -> tuple[str, int | None]:
 # The governed MDUHeader fields that flow through the proposal workflow.
 _HEADER_META_FIELDS = [
     ("description",                    "Description",                    "textarea"),
-    ("category",                       "Category",                       "text"),
+    ("category",                       "Category",                       "select"),
     ("data_classification",            "Data Classification",            "select"),
     ("collaboration_mode",             "Collaboration Mode",             "select"),
-    ("owning_domain_lob",              "Business Function",              "text"),
+    ("owning_domain_lob",              "Business Function",              "multi"),
     ("approval_model",                 "Approval Model",                 "select"),
     ("approval_scope",                 "Approval Scope",                 "select"),
     ("approver_group_mapping",         "Approver Group Mapping",         "textarea"),
-    ("tags",                           "Tags",                           "text"),
+    ("tags",                           "Tags",                           "tags"),
 ]
 
 # Extra DEFINE-only snapshot fields that live on ChangeRequest, not MDUHeader.
@@ -1130,6 +1245,8 @@ _HEADER_META_CHOICES = {
     "collaboration_mode":  dict(MDUHeader.CollaborationMode.choices),
     "approval_model":      dict(MDUHeader.ApprovalModel.choices),
     "approval_scope":      dict(MDUHeader.ApprovalScope.choices),
+    "category":            settings.REFERENCE_CATEGORY_CHOICES,
+    "owning_domain_lob":   settings.BUSINESS_FUNCTION_CHOICES,
 }
 
 
@@ -1191,7 +1308,12 @@ def _get_header_metadata_diff(ch, header: MDUHeader) -> list:
             continue
         label, _ftype = field_map[field]
         value_before = str(getattr(header, field, "") or "")
-        choices = _HEADER_META_CHOICES.get(field, {})
+        raw_choices = _HEADER_META_CHOICES.get(field, {})
+        # Normalize: could be dict or list-of-tuples (e.g. REFERENCE_CATEGORY_CHOICES)
+        if isinstance(raw_choices, (list, tuple)):
+            choices = dict(raw_choices)
+        else:
+            choices = raw_choices
         result.append({
             "field":   field,
             "label":   label,
@@ -1691,20 +1813,7 @@ def propose_change(request, header_pk):
         if header.last_approved_change and header.last_approved_change.payload_json:
             initial_payload = header.last_approved_change.payload_json
         else:
-            initial_payload = json.dumps({
-                "rows": [
-                    {
-                        "row_type": "header",
-                        "operation": "BUILD NEW",
-                        "start_dt": "",
-                        "end_dt": "",
-                        "version": "",
-                        "string_01": "BUS_FIELD_01",
-                        "string_02": "BUS_FIELD_02",
-                        "string_03": "BUS_FIELD_03",
-                    }
-                ]
-            }, indent=2)
+            initial_payload = json.dumps({"rows": _build_empty_payload_rows(header)}, indent=2)
 
         # Inject current header metadata snapshot so it travels with the payload
         baseline_metadata_snapshot = _extract_header_metadata_snapshot(header)
@@ -1732,20 +1841,7 @@ def propose_change(request, header_pk):
             if header.last_approved_change and header.last_approved_change.payload_json:
                 initial_payload = header.last_approved_change.payload_json
             else:
-                initial_payload = json.dumps({
-                    "rows": [
-                        {
-                            "row_type": "header",
-                            "operation": "BUILD NEW",
-                            "start_dt": "",
-                            "end_dt": "",
-                            "version": "",
-                            "string_01": "BUS_FIELD_01",
-                            "string_02": "BUS_FIELD_02",
-                            "string_03": "BUS_FIELD_03",
-                        }
-                    ]
-                }, indent=2)
+                initial_payload = json.dumps({"rows": _build_empty_payload_rows(header)}, indent=2)
 
             baseline_payload_json = initial_payload
 
@@ -1872,6 +1968,42 @@ def propose_change(request, header_pk):
 
         # Normal save draft path
         else:
+            # If steward edited the row structure, create a DEFINE CR instead of a data-change CR
+            if post.get("rs_changed") == "1" and in_group(request.user, "steward"):
+                rs_rows, rs_errors = _snapshot_row_structure_from_post(post, is_draft=True)
+                snapshot = _extract_header_metadata_snapshot(header)
+                try:
+                    pobj = json.loads(_inject_metadata_into_payload("{}", snapshot))
+                except Exception:
+                    pobj = {"header_metadata": snapshot}
+                pobj["row_structure"] = rs_rows
+                pobj["define_extra"] = {
+                    "business_owner_sid": "",
+                    "ref_type": getattr(header, "ref_type", "map"),
+                    "mode": getattr(header, "mode", "snapshot"),
+                    "certification_required": getattr(header, "certification_required", False),
+                }
+                define_payload = json.dumps(pobj, indent=2)
+                cr = _create_cr_with_unique_display_id(
+                    header=header,
+                    status=ChangeRequest.Status.DRAFT,
+                    operation_hint="DEFINE",
+                    collaboration_mode=header.collaboration_mode,
+                    approver_ad_group=header.approver_group_mapping,
+                    payload_json=define_payload,
+                    created_by=request.user,
+                    requested_by_sid=(getattr(request.user, "username", "") or "").strip(),
+                )
+                cr_url = reverse("mdu:proposed_change_detail", kwargs={"pk": cr.pk})
+                messages.success(
+                    request,
+                    mark_safe(
+                        f'Row structure change saved as <a href="{cr_url}" class="alert-link">{cr.display_id}</a>. '
+                        "Submit it for approval before proposing data changes."
+                    ),
+                )
+                return redirect("mdu:header_detail", pk=header.pk)
+
             form = ProposedChangeForm(post)
             if form.is_valid():
                 ch = form.save(commit=False)
@@ -1946,6 +2078,16 @@ def propose_change(request, header_pk):
     visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
     col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
 
+    # If no business columns in the payload yet, derive them from the live row structure
+    # so the Proposed Data table shows correct column headers for new references.
+    if not visible_cols:
+        rs_cols = _load_row_structure(header)
+        user_rs = [c for c in rs_cols if not c.get("is_system", False)]
+        if user_rs:
+            visible_cols = [f"string_{i:02d}" for i in range(1, len(user_rs) + 1)]
+            col_labels   = {f"string_{i:02d}": col["field_name"]
+                            for i, col in enumerate(user_rs, start=1)}
+
     return render(request, "mdu/proposed_change_form.html", {
         "header": header,
         "form": form,
@@ -1961,6 +2103,9 @@ def propose_change(request, header_pk):
         "focus_row_index": focus_row_index,
         "rows_added_count": rows_added_count,
 
+        # row structure for display panel + empty-reference column scaffold
+        "row_structure_cols": _load_row_structure(header),
+        "user_row_structure_cols": [c for c in _load_row_structure(header) if not c.get("is_system", False)],
         # header metadata editing (resolved values for template)
         **_build_header_meta_context(header),
 
@@ -2134,12 +2279,16 @@ def proposed_change_detail(request, pk):
 
     can_edit = False
     if (ch.status == ChangeRequest.Status.DRAFT) and (in_group(request.user, "maker") or in_group(request.user, "steward")):
-        baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
-        baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
-        if ch.version is not None and baseline_version_latest is not None:
-            can_edit = (ch.version == baseline_version_latest)
+        if header.last_approved_change is None:
+            # No approved data yet — draft is always editable on a brand-new reference.
+            can_edit = True
         else:
-            can_edit = (_normalized_payload_fingerprint(ch.payload_json or "") == baseline_fp_latest)
+            baseline_payload_latest, baseline_version_latest = _current_baseline_for_header(header)
+            baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
+            if ch.version is not None and baseline_version_latest is not None:
+                can_edit = (ch.version == baseline_version_latest)
+            else:
+                can_edit = (_normalized_payload_fingerprint(ch.payload_json or "") == baseline_fp_latest)
 
     # Change summary (values rows only)
     def _op(r):
@@ -2260,7 +2409,10 @@ def proposed_change_edit(request, pk):
     baseline_fp_latest = _normalized_payload_fingerprint(baseline_payload_latest)
 
     aligned = False
-    if ch.version is not None and baseline_version_latest is not None:
+    if header.last_approved_change is None:
+        # No approved data yet — draft can never be stale; always treat as aligned.
+        aligned = True
+    elif ch.version is not None and baseline_version_latest is not None:
         aligned = (ch.version == baseline_version_latest)
     else:
         aligned = (_normalized_payload_fingerprint(ch.payload_json or "") == baseline_fp_latest)
@@ -2270,7 +2422,7 @@ def proposed_change_edit(request, pk):
             request,
             f"The approved data for {header.ref_name} has changed since this draft was created. This draft is view-only. Discard it and create a new draft to submit."
         )
-        return redirect("mdu:proposed_change_detail", pk=ch.pk)
+        return redirect("mdu:header_detail", pk=header.pk)
 
 
 
@@ -2582,6 +2734,16 @@ def proposed_change_edit(request, pk):
     visible_cols = [c for c in string_cols if (header_row.get(c) or "").strip()]
     col_labels = {c: ((header_row.get(c) or "").strip() or c) for c in visible_cols}
 
+    # If no business columns in the payload yet, derive them from the live row structure
+    # so the Proposed Data table shows correct column headers for new references.
+    if not visible_cols:
+        rs_cols = _load_row_structure(header)
+        user_rs = [c for c in rs_cols if not c.get("is_system", False)]
+        if user_rs:
+            visible_cols = [f"string_{i:02d}" for i in range(1, len(user_rs) + 1)]
+            col_labels   = {f"string_{i:02d}": col["field_name"]
+                            for i, col in enumerate(user_rs, start=1)}
+
     return render(request, "mdu/proposed_change_form.html", {
         "header": header,
         "form": form,
@@ -2600,6 +2762,9 @@ def proposed_change_edit(request, pk):
         "editing": True,
         "ch": ch,
         "change": ch,  # keep template compatibility if it expects 'change'
+        # row structure for display panel + empty-reference column scaffold
+        "row_structure_cols": _load_row_structure(header),
+        "user_row_structure_cols": [c for c in _load_row_structure(header) if not c.get("is_system", False)],
         # header metadata editing (resolved values for template)
         **_build_header_meta_context(header),
         "breadcrumbs": [

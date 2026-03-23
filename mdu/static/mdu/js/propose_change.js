@@ -277,6 +277,14 @@
     const anyCellDirty = !!document.querySelector("input.pcf-business-cell.pcf-dirty");
     const dirty = anyCellDirty || metaFieldsDirty();
     if (saveDraftBtn) saveDraftBtn.disabled = !dirty;
+    if (dirty) showSubmitBtn();
+  }
+
+  // Show the Submit button the first time any change is detected
+  function showSubmitBtn() {
+    if (submitBtn && submitBtn.style.display === "none") {
+      submitBtn.style.display = "";
+    }
   }
 
   // ── Submit gating ────────────────────────────────────────
@@ -301,22 +309,43 @@
   }
 
   function updateSubmitState() {
-    if (!submitBtn) return;
-    const ready = computeMissing().length === 0;
-    submitBtn.disabled = !ready;
+    // Submit starts enabled — validation runs on click, not on every input.
+    // This function is kept so callers don't break; it's a no-op now.
   }
 
-  // Click on disabled submit wrapper → show what's missing
-  if (submitWrap) {
-    submitWrap.addEventListener("click", function () {
-      if (!submitBtn || !submitBtn.disabled) return;
+  // Click on submit button → validate; block modal if missing fields
+  if (submitBtn) {
+    submitBtn.addEventListener("click", function (e) {
       const missing = computeMissing();
+      if (missing.length === 0) {
+        // All good — let the Bootstrap modal open naturally
+        if (submitHelp) submitHelp.classList.add("d-none");
+        if (ticketRef)      ticketRef.classList.remove("is-invalid");
+        if (changeReason)   changeReason.classList.remove("is-invalid");
+        if (categorySelect) categorySelect.classList.remove("is-invalid");
+        return;
+      }
+      // Block the modal from opening and show inline errors
+      e.preventDefault();
+      e.stopImmediatePropagation();
       if (submitHelp) submitHelp.classList.remove("d-none");
-      if (ticketRef)    ticketRef.classList.toggle("is-invalid",    missing.includes("ticket"));
-      if (changeReason) changeReason.classList.toggle("is-invalid", missing.includes("reason"));
+      if (ticketRef)      ticketRef.classList.toggle("is-invalid",    missing.includes("ticket"));
+      if (changeReason)   changeReason.classList.toggle("is-invalid", missing.includes("reason"));
       if (categorySelect) categorySelect.classList.toggle("is-invalid", missing.includes("category"));
-    });
+    }, true); // capture phase so we beat Bootstrap's modal listener
   }
+
+  // Hide the help message as soon as all required fields are filled
+  document.addEventListener("input", function (e) {
+    if (submitHelp && !submitHelp.classList.contains("d-none")) {
+      if (computeMissing().length === 0) {
+        submitHelp.classList.add("d-none");
+        if (ticketRef)      ticketRef.classList.remove("is-invalid");
+        if (changeReason)   changeReason.classList.remove("is-invalid");
+        if (categorySelect) categorySelect.classList.remove("is-invalid");
+      }
+    }
+  });
 
   // Auto-select first real category option
   if (categorySelect) {
@@ -358,6 +387,22 @@
     // Reference metadata fields
     if (el.classList.contains("pcf-hm-field")) {
       updateSaveDraftState();
+    }
+  });
+
+  // ── Change event listener — catches selects and checkboxes ──
+  // Selects fire "change" (not "input") reliably; mirror the same logic.
+  document.addEventListener("change", function (e) {
+    const el = e.target;
+    if (!el) return;
+    if (el.tagName === "SELECT" && el.closest("#pcfCategoryWrap")) {
+      updateSaveDraftState();
+      updateSubmitState();
+      return;
+    }
+    if (el.classList.contains("pcf-hm-field")) {
+      updateSaveDraftState();
+      return;
     }
   });
 
